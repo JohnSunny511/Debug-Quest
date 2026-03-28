@@ -1,6 +1,7 @@
 // executeCode.js
 import axios from "axios";
 import { API_BASE_URL } from "../config/api";
+import { clearStoredSession, isAuthError } from "./authSession";
 
 // Judge0 language IDs
 const LANGUAGE_MAP = {
@@ -40,7 +41,16 @@ export async function executeCode(language, code) {
 
     return response.data.output;
 
-  } catch (_err) {
-    throw new Error("Failed to execute code.");
+  } catch (err) {
+    if (isAuthError(err)) {
+      clearStoredSession();
+      throw new Error("Session expired. Please sign in again.");
+    }
+
+    const message =
+      err.response?.data?.detail ||
+      err.response?.data?.error ||
+      "Failed to execute code.";
+    throw new Error(message);
   }
 }
