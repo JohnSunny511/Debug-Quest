@@ -5,12 +5,11 @@ import BackButton from "./BackButton";
 import AdminRoute from "./AdminRoute";
 import PageLoader from "./PageLoader";
 
-const Signup = lazy(() => import("./Signup"));
-const Login = lazy(() => import("../pages/Login"));
 const App = lazy(() => import("./App"));
 const Landing = lazy(() => import("../pages/Landing"));
 const LearnDebugging = lazy(() => import("../pages/LearnDebugging"));
 const LearnLesson = lazy(() => import("../pages/LearnLesson"));
+const RuntimeNote = lazy(() => import("../pages/RuntimeNote"));
 const Leaderboard = lazy(() => import("./Leaderboard"));
 const BuggyCodeGenerator = lazy(() => import("./BuggyCodeGenerator"));
 const QuestionsList = lazy(() => import("../pages/QuestionsList"));
@@ -33,6 +32,7 @@ function Root() {
           <Route path="/" element={<Landing />} />
           <Route path="/learn" element={<LearnDebugging />} />
           <Route path="/learn/:lessonId" element={<LearnLesson />} />
+          <Route path="/runtime-note" element={<RuntimeNote />} />
           <Route path="/challenges" element={<App />} />
           <Route path="/:level" element={<QuestionsList />} />
           <Route path="/:level/:id" element={<QuestionDetail />} />
@@ -69,8 +69,8 @@ function Root() {
               </AdminRoute>
             }
           />
-          <Route path="/signup" element={<Signup />} />
-          <Route path="/login" element={<Login />} />
+          <Route path="/signup" element={<Landing />} />
+          <Route path="/login" element={<Landing />} />
           <Route path="/leaderboard" element={<Leaderboard />} />
         </Routes>
       </Suspense>

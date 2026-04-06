@@ -72,6 +72,8 @@
   display: flex;
   align-items: center;
   gap: 10px;
+  color: inherit;
+  text-decoration: none;
 }
 
 .brand-mark {
@@ -295,11 +297,190 @@
   font-weight: 600;
 }
 
+.support-chip-action {
+  cursor: pointer;
+  transition: transform 0.2s ease, background-color 0.2s ease, border-color 0.2s ease;
+}
+
+.support-chip-action:hover {
+  transform: translateY(-1px);
+}
+
+.support-chip-action.is-active {
+  background: linear-gradient(135deg, rgba(0, 197, 255, 0.26), rgba(17, 216, 177, 0.22));
+  border-color: rgba(123, 227, 255, 0.55);
+  color: #f4faff;
+}
+
 .hero-visual {
   position: relative;
   min-height: 370px;
   animation: fadeSlide 1s ease-out both;
   animation-delay: 0.15s;
+}
+
+.hero-visual-auth {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.landing-auth-shell {
+  width: 100%;
+  display: flex;
+  justify-content: flex-end;
+  padding-left: clamp(44px, 7vw, 104px);
+}
+
+.landing-auth-panel {
+  width: min(100%, 460px);
+  padding: clamp(24px, 4vw, 34px);
+  border-radius: 28px;
+  background: linear-gradient(180deg, rgba(11, 32, 58, 0.94), rgba(8, 23, 44, 0.92));
+  border: 1px solid rgba(163, 202, 231, 0.24);
+  box-shadow:
+    0 26px 50px rgba(1, 10, 24, 0.48),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  backdrop-filter: blur(12px);
+}
+
+.landing-auth-panel-header h2 {
+  margin: 8px 0 10px;
+  font-size: clamp(1.7rem, 2vw, 2.2rem);
+  color: #f4faff;
+}
+
+.landing-auth-panel-header p {
+  margin: 0;
+  color: #c0d8ec;
+  line-height: 1.6;
+}
+
+.landing-auth-panel-kicker {
+  color: #8fe8ff !important;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.landing-auth-form {
+  margin-top: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.landing-auth-field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.landing-auth-field span {
+  color: #dcecf9;
+  font-size: 0.92rem;
+  font-weight: 600;
+}
+
+.landing-auth-field input {
+  width: 100%;
+  border: 1px solid rgba(168, 205, 231, 0.22);
+  border-radius: 14px;
+  background: rgba(4, 14, 28, 0.55);
+  color: #f7fbff;
+  padding: 15px 16px;
+  font-size: 1rem;
+  outline: none;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease;
+}
+
+.landing-auth-field input::placeholder {
+  color: #88a5be;
+}
+
+.landing-auth-field input:focus {
+  border-color: rgba(123, 227, 255, 0.8);
+  box-shadow: 0 0 0 4px rgba(0, 197, 255, 0.14);
+  background: rgba(4, 14, 28, 0.72);
+}
+
+.landing-auth-submit {
+  margin-top: 6px;
+  border: 0;
+  border-radius: 14px;
+  padding: 15px 18px;
+  background: linear-gradient(135deg, #00c5ff, #11d8b1);
+  color: #03233c;
+  font-size: 1rem;
+  font-weight: 800;
+  cursor: pointer;
+  box-shadow: 0 14px 24px rgba(0, 197, 255, 0.28);
+  transition: transform 0.2s ease, box-shadow 0.2s ease, opacity 0.2s ease;
+}
+
+.landing-auth-submit:hover {
+  transform: translateY(-2px);
+}
+
+.landing-auth-submit:disabled,
+.landing-auth-field input:disabled {
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+.landing-auth-error,
+.landing-auth-success {
+  border-radius: 14px;
+  padding: 12px 14px;
+  font-size: 0.93rem;
+  line-height: 1.5;
+}
+
+.landing-auth-error {
+  border: 1px solid rgba(255, 147, 147, 0.35);
+  background: rgba(95, 22, 31, 0.34);
+  color: #ffd4d8;
+}
+
+.landing-auth-success {
+  border: 1px solid rgba(111, 235, 189, 0.32);
+  background: rgba(10, 78, 58, 0.34);
+  color: #bef8df;
+}
+
+.landing-auth-divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 24px 0 18px;
+  color: #9cc2de;
+  font-size: 0.88rem;
+}
+
+.landing-auth-divider::before,
+.landing-auth-divider::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(90deg, rgba(156, 194, 222, 0), rgba(156, 194, 222, 0.55), rgba(156, 194, 222, 0));
+}
+
+.landing-auth-google-wrap {
+  display: flex;
+  justify-content: center;
+}
+
+.landing-auth-footer-copy {
+  margin: 22px 0 0;
+  text-align: center;
+  color: #bfd8ec;
+}
+
+.landing-auth-footer-copy a {
+  color: #8fe8ff;
+  font-weight: 700;
+  text-decoration: none;
 }
 
 .terminal-card {
@@ -590,6 +771,14 @@
     min-height: auto;
   }
 
+  .landing-auth-panel {
+    width: 100%;
+  }
+
+  .landing-auth-shell {
+    padding-left: 0;
+  }
+
   .feature-strip {
     grid-template-columns: 1fr;
   }
@@ -646,5 +835,10 @@
     position: static;
     display: inline-flex;
     margin-top: 10px;
+  }
+
+  .landing-auth-panel {
+    border-radius: 22px;
+    padding: 22px 18px;
   }
 }

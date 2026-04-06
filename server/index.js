@@ -110,9 +110,9 @@ app.post("/api/execute", authenticateUser, executeRateLimit, async (req, res) =>
   }
 
   if (!codeExecutionServiceBaseUrl) {
-    return res.status(500).json({
+    return res.status(503).json({
       error: "Code execution service unavailable",
-      detail: "CODE_EXECUTION_SERVICE_URL is not configured.",
+      detail: "The code execution container is not running. See the README runtime note for setup details.",
     });
   }
 
@@ -164,20 +164,20 @@ app.post("/api/execute", authenticateUser, executeRateLimit, async (req, res) =>
     });
 
   } catch (error) {
-    const upstreamDetail =
-      error?.response?.data?.message ||
-      error?.response?.data?.error ||
-      error?.response?.data?.detail ||
-      error?.message ||
-      "Unknown execution error";
-    const attempted =
-      Array.isArray(error?.attemptedEndpoints) && error.attemptedEndpoints.length
-        ? ` Tried: ${error.attemptedEndpoints.join(", ")}`
-        : "";
+    const status = error?.response?.status === 400 ? 400 : 503;
+    const detail =
+      status === 400
+        ? (
+            error?.response?.data?.message ||
+            error?.response?.data?.error ||
+            error?.response?.data?.detail ||
+            "Invalid execution request."
+          )
+        : "The code execution container is not reachable right now. See the README runtime note for setup details.";
 
-    res.status(500).json({
+    res.status(status).json({
       error: "Code execution failed",
-      detail: `${upstreamDetail}${attempted}`,
+      detail,
     });
   }
 });

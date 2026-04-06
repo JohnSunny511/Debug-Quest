@@ -2,6 +2,7 @@
 import axios from "axios";
 import { API_BASE_URL } from "../config/api";
 import { clearStoredSession, isAuthError } from "./authSession";
+import { getExecutionServiceMessage, isServiceUnavailableError } from "./runtimeSupport";
 
 // Judge0 language IDs
 const LANGUAGE_MAP = {
@@ -47,10 +48,14 @@ export async function executeCode(language, code) {
       throw new Error("Session expired. Please sign in again.");
     }
 
-    const message =
+    const rawMessage =
       err.response?.data?.detail ||
       err.response?.data?.error ||
       "Failed to execute code.";
+    const message = isServiceUnavailableError(rawMessage)
+      ? getExecutionServiceMessage()
+      : rawMessage;
+
     throw new Error(message);
   }
 }

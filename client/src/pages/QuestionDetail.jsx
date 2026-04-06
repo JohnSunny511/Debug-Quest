@@ -1,6 +1,6 @@
 // src/pages/QuestionDetail.jsx
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { useLocation, useNavigate, useParams } from "react-router-dom";
+import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import axios from "axios";
 import Editor from "@monaco-editor/react";
 import { calculateChangePercentage, countChanges } from "../utils/countCodeChanges";
@@ -9,6 +9,12 @@ import { recordLocalLeaderboardActivity } from "../utils/leaderboardActivity";
 import { API_BASE_URL } from "../config/api";
 import { isAuthError, redirectToLogin, validateStoredSession } from "../utils/authSession";
 import { applySubmissionProgress, readUserProgress } from "../utils/performanceProgress";
+import {
+  getChatbotServiceMessage,
+  getExecutionServiceMessage,
+  isServiceUnavailableError,
+  RUNTIME_NOTE_PATH,
+} from "../utils/runtimeSupport";
 import UserTopNav from "../components/UserTopNav";
 import PageLoader from "../components/PageLoader";
 
@@ -28,6 +34,7 @@ function QuestionDetail() {
   const [discussionLoading, setDiscussionLoading] = useState(false);
   const [discussionBusy, setDiscussionBusy] = useState(false);
   const [discussionError, setDiscussionError] = useState("");
+  const [showRuntimeNote, setShowRuntimeNote] = useState(false);
   const [currentUserRole, setCurrentUserRole] = useState(() => localStorage.getItem("role") || "user");
   const [pageError, setPageError] = useState("");
   const [revealedHints, setRevealedHints] = useState([]);
@@ -213,12 +220,15 @@ function QuestionDetail() {
     try {
       const result = await executeCode(question.language, question.code);
       setOutput(result);
+      setShowRuntimeNote(false);
     } catch (err) {
       if (String(err?.message || "").includes("Session expired")) {
         redirectToLogin(navigate);
         return;
       }
-      setOutput(err?.message || "Error running code.");
+      const message = err?.message || "Error running code.";
+      setOutput(message);
+      setShowRuntimeNote(isServiceUnavailableError(message));
     }
   };
 
@@ -261,7 +271,15 @@ function QuestionDetail() {
         redirectToLogin(navigate);
         return;
       }
-      alert("Submission failed.");
+      const rawMessage =
+        _err?.response?.data?.message ||
+        _err?.response?.data?.error ||
+        _err?.message ||
+        "Submission failed.";
+      const message = isServiceUnavailableError(rawMessage)
+        ? getExecutionServiceMessage()
+        : rawMessage;
+      alert(message);
     }
   };
 
@@ -286,7 +304,8 @@ function QuestionDetail() {
       });
 
       if (!response.ok) {
-        throw new Error(`Request failed: ${response.status}`);
+        const errorPayload = await response.json().catch(() => ({}));
+        throw new Error(errorPayload?.error || `Request failed: ${response.status}`);
       }
 
       const data = await response.json();
@@ -301,11 +320,20 @@ function QuestionDetail() {
 
       setChatMessages((prev) => [...prev, { role: "assistant", text: `${answer}${score}` }]);
     } catch (_err) {
+      const rawMessage =
+        _err?.message ||
+        "Unable to reach the AI service right now.";
+      const message = isServiceUnavailableError(rawMessage)
+        ? getChatbotServiceMessage()
+        : "Unable to reach the AI service right now.";
+
       setChatMessages((prev) => [
         ...prev,
         {
           role: "assistant",
-          text: "Unable to reach the AI service right now.",
+          text: message,
+          linkTo: isServiceUnavailableError(rawMessage) ? RUNTIME_NOTE_PATH : "",
+          linkLabel: isServiceUnavailableError(rawMessage) ? "Open Runtime Note" : "",
         },
       ]);
     } finally {
@@ -662,6 +690,13 @@ function QuestionDetail() {
                 }}
               >
                 <strong>Output:</strong> {output}
+                {showRuntimeNote && (
+                  <div style={{ marginTop: "0.75rem", fontFamily: "'Segoe UI', Tahoma, Geneva, Verdana, sans-serif" }}>
+                    <Link to={RUNTIME_NOTE_PATH} style={{ color: "#93c5fd", fontWeight: 600 }}>
+                      Open Runtime Note
+                    </Link>
+                  </div>
+                )}
               </div>
 
               <p style={{ fontSize: "1rem", color: "#cbd5e1", marginBottom: "0.5rem" }}>
@@ -743,7 +778,14 @@ function QuestionDetail() {
                     lineHeight: 1.35,
                   }}
                 >
-                  {message.text}
+                  <span>{message.text}</span>
+                  {message.linkTo ? (
+                    <div style={{ marginTop: "0.5rem" }}>
+                      <Link to={message.linkTo} style={{ color: "#bfdbfe", fontWeight: 600 }}>
+                        {message.linkLabel || "Open Runtime Note"}
+                      </Link>
+                    </div>
+                  ) : null}
                 </div>
               </div>
             ))}

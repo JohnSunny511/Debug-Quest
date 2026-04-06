@@ -3,19 +3,6 @@
   "installCommand": "npm run install:all",
   "buildCommand": "npm run build",
   "outputDirectory": "client/build",
-  "redirects": [
-    {
-      "source": "/:path*",
-      "has": [
-        {
-          "type": "host",
-          "value": "^(?!debug-quest\\.vercel\\.app$).+\\.vercel\\.app$"
-        }
-      ],
-      "destination": "https://debug-quest.vercel.app/:path*",
-      "permanent": false
-    }
-  ],
   "rewrites": [
     {
       "source": "/api/:path*",

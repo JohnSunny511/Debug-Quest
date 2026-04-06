@@ -1,13 +1,33 @@
 import React, { useEffect, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import axios from "axios";
+import { GoogleLogin } from "@react-oauth/google";
+import { Link, useLocation, useNavigate } from "react-router-dom";
+import { API_BASE_URL } from "../config/api";
 import { clearStoredSession, validateStoredSession } from "../utils/authSession";
 import "./Landing.css";
 
 function Landing() {
   const navigate = useNavigate();
+  const location = useLocation();
   const [token, setToken] = useState(() => localStorage.getItem("token"));
   const [username, setUsername] = useState(() => localStorage.getItem("username"));
   const [role, setRole] = useState(() => localStorage.getItem("role") || "");
+  const [loginUsername, setLoginUsername] = useState("");
+  const [loginPassword, setLoginPassword] = useState("");
+  const [signupUsername, setSignupUsername] = useState("");
+  const [signupPassword, setSignupPassword] = useState("");
+  const [isLoginSubmitting, setIsLoginSubmitting] = useState(false);
+  const [isSignupSubmitting, setIsSignupSubmitting] = useState(false);
+  const [loginErrorMessage, setLoginErrorMessage] = useState("");
+  const [signupErrorMessage, setSignupErrorMessage] = useState("");
+  const [signupSuccessMessage, setSignupSuccessMessage] = useState("");
+
+  const activePanel =
+    location.pathname === "/login"
+      ? "login"
+      : location.pathname === "/signup"
+        ? "signup"
+        : "default";
 
   useEffect(() => {
     let isMounted = true;
@@ -51,6 +71,102 @@ function Landing() {
     };
   }, [navigate]);
 
+  useEffect(() => {
+    if (activePanel !== "login") {
+      setLoginErrorMessage("");
+      setIsLoginSubmitting(false);
+    }
+
+    if (activePanel !== "signup") {
+      setSignupErrorMessage("");
+      setSignupSuccessMessage("");
+      setIsSignupSubmitting(false);
+    }
+  }, [activePanel]);
+
+  const completeLogin = (data, fallbackUsername = loginUsername) => {
+    localStorage.setItem("token", data.token);
+    localStorage.setItem("username", data.username || fallbackUsername);
+    if (data.role) {
+      localStorage.setItem("role", data.role);
+    }
+
+    setToken(data.token);
+    setUsername(data.username || fallbackUsername);
+    setRole(data.role || "");
+    navigate(data.redirectTo || "/challenges");
+  };
+
+  const handleTraditionalLogin = async () => {
+    if (!loginUsername.trim() || !loginPassword.trim()) {
+      setLoginErrorMessage("Enter both your username and password to continue.");
+      return;
+    }
+
+    try {
+      setIsLoginSubmitting(true);
+      setLoginErrorMessage("");
+
+      const res = await axios.post(`${API_BASE_URL}/api/auth/login`, {
+        username: loginUsername.trim(),
+        password: loginPassword,
+      });
+
+      completeLogin(res.data);
+    } catch (err) {
+      const msg = err.response?.data?.message || "Invalid credentials.";
+      setLoginErrorMessage(msg);
+    } finally {
+      setIsLoginSubmitting(false);
+    }
+  };
+
+  const handleGoogleLogin = async (credentialResponse) => {
+    try {
+      setIsLoginSubmitting(true);
+      setLoginErrorMessage("");
+
+      const res = await axios.post(`${API_BASE_URL}/api/auth/google-login`, {
+        token: credentialResponse.credential,
+      });
+
+      completeLogin(res.data, res.data.username);
+    } catch (err) {
+      const msg = err.response?.data?.message || "Google login failed.";
+      setLoginErrorMessage(msg);
+    } finally {
+      setIsLoginSubmitting(false);
+    }
+  };
+
+  const handleSignup = async () => {
+    if (!signupUsername.trim() || !signupPassword.trim()) {
+      setSignupSuccessMessage("");
+      setSignupErrorMessage("Choose a username and password to create your account.");
+      return;
+    }
+
+    try {
+      setIsSignupSubmitting(true);
+      setSignupErrorMessage("");
+      setSignupSuccessMessage("");
+
+      const res = await axios.post(`${API_BASE_URL}/api/auth/signup`, {
+        username: signupUsername.trim(),
+        password: signupPassword,
+      });
+
+      setSignupSuccessMessage(res.data.message || "Account created successfully.");
+      setTimeout(() => navigate("/login"), 800);
+    } catch (err) {
+      const msg = err.response?.data?.message || err.message || "Signup failed.";
+      setSignupSuccessMessage("");
+      setSignupErrorMessage(msg);
+    } finally {
+      setIsSignupSubmitting(false);
+    }
+  };
+
   return (
     <div className="landing-page">
       <div className="landing-ambient" aria-hidden="true">
@@ -60,10 +176,10 @@ function Landing() {
       </div>
 
       <header className="landing-header">
-        <div className="landing-brand">
+        <Link className="landing-brand" to="/">
           <span className="brand-mark">&lt;/&gt;</span>
           <span className="brand-name">Debug Quest</span>
-        </div>
+        </Link>
 
         <div className="landing-nav">
           <Link className="nav-link" to="/learn">
@@ -186,29 +302,190 @@ function Landing() {
             <div className="support-chip">Hints and guided debugging</div>
             <div className="support-chip">Per-question discussions</div>
             <div className="support-chip">Leaderboard momentum</div>
+            {!token && (
+              <>
+                <button
+                  type="button"
+                  className={`support-chip support-chip-action ${activePanel === "login" ? "is-active" : ""}`}
+                  onClick={() => navigate("/login")}
+                >
+                  Open Login
+                </button>
+                <button
+                  type="button"
+                  className={`support-chip support-chip-action ${activePanel === "signup" ? "is-active" : ""}`}
+                  onClick={() => navigate("/signup")}
+                >
+                  Open Signup
+                </button>
+              </>
+            )}
           </div>
         </section>
 
-        <section className="hero-visual" aria-hidden="true">
-          <div className="terminal-card">
-            <div className="terminal-head">
-              <span className="dot red" />
-              <span className="dot yellow" />
-              <span className="dot green" />
-              <span className="terminal-title">debug-session.js</span>
-            </div>
+        <section className={`hero-visual ${activePanel !== "default" ? "hero-visual-auth" : ""}`}>
+          {activePanel === "login" ? (
+            <div className="landing-auth-shell">
+              <div className="landing-auth-panel">
+                <div className="landing-auth-panel-header">
+                  <p className="landing-auth-panel-kicker">Account Access</p>
+                  <h2>Sign in to Debug Quest</h2>
+                  <p>Use your existing account to jump straight into challenges.</p>
+                </div>
 
-            <div className="terminal-body">
-              <div className="code-line line-1">const score = bugsFixed * speed;</div>
-              <div className="code-line line-2">if (tests.pass()) submit(score);</div>
-              <div className="code-line line-3">leaderboard.update(playerId);</div>
-              <div className="typing-line">run debug-quest --mode ranked</div>
-            </div>
-          </div>
+                <form
+                  className="landing-auth-form"
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    handleTraditionalLogin();
+                  }}
+                >
+                  <label className="landing-auth-field">
+                    <span>Username</span>
+                    <input
+                      value={loginUsername}
+                      onChange={(event) => setLoginUsername(event.target.value)}
+                      placeholder="Enter your username"
+                      autoComplete="username"
+                      disabled={isLoginSubmitting}
+                    />
+                  </label>
 
-          <div className="floating-pill pill-1">Easy to Hard Tracks</div>
-          <div className="floating-pill pill-2">Realtime Feedback</div>
-          <div className="floating-pill pill-3">Code Like Production</div>
+                  <label className="landing-auth-field">
+                    <span>Password</span>
+                    <input
+                      type="password"
+                      value={loginPassword}
+                      onChange={(event) => setLoginPassword(event.target.value)}
+                      placeholder="Enter your password"
+                      autoComplete="current-password"
+                      disabled={isLoginSubmitting}
+                    />
+                  </label>
+
+                  {loginErrorMessage ? (
+                    <div className="landing-auth-error" role="alert">
+                      {loginErrorMessage}
+                    </div>
+                  ) : null}
+
+                  <button
+                    type="submit"
+                    className="landing-auth-submit"
+                    disabled={isLoginSubmitting}
+                  >
+                    {isLoginSubmitting ? "Signing In..." : "Login to Continue"}
+                  </button>
+                </form>
+
+                <div className="landing-auth-divider">
+                  <span>or continue with</span>
+                </div>
+
+                <div className="landing-auth-google-wrap">
+                  <GoogleLogin
+                    onSuccess={handleGoogleLogin}
+                    onError={() => setLoginErrorMessage("Google login failed. Please try again.")}
+                  />
+                </div>
+
+                <p className="landing-auth-footer-copy">
+                  New to Debug Quest? <Link to="/signup">Create your account</Link>
+                </p>
+              </div>
+            </div>
+          ) : null}
+
+          {activePanel === "signup" ? (
+            <div className="landing-auth-shell">
+              <div className="landing-auth-panel">
+                <div className="landing-auth-panel-header">
+                  <p className="landing-auth-panel-kicker">New Member Setup</p>
+                  <h2>Create your Debug Quest account</h2>
+                  <p>Pick a username and password to unlock the full challenge experience.</p>
+                </div>
+
+                <form
+                  className="landing-auth-form"
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    handleSignup();
+                  }}
+                >
+                  <label className="landing-auth-field">
+                    <span>Username</span>
+                    <input
+                      value={signupUsername}
+                      onChange={(event) => setSignupUsername(event.target.value)}
+                      placeholder="Choose a username"
+                      autoComplete="username"
+                      disabled={isSignupSubmitting}
+                    />
+                  </label>
+
+                  <label className="landing-auth-field">
+                    <span>Password</span>
+                    <input
+                      type="password"
+                      value={signupPassword}
+                      onChange={(event) => setSignupPassword(event.target.value)}
+                      placeholder="Create a password"
+                      autoComplete="new-password"
+                      disabled={isSignupSubmitting}
+                    />
+                  </label>
+
+                  {signupErrorMessage ? (
+                    <div className="landing-auth-error" role="alert">
+                      {signupErrorMessage}
+                    </div>
+                  ) : null}
+
+                  {signupSuccessMessage ? (
+                    <div className="landing-auth-success" role="status">
+                      {signupSuccessMessage}
+                    </div>
+                  ) : null}
+
+                  <button
+                    type="submit"
+                    className="landing-auth-submit"
+                    disabled={isSignupSubmitting}
+                  >
+                    {isSignupSubmitting ? "Creating Account..." : "Create Account"}
+                  </button>
+                </form>
+
+                <p className="landing-auth-footer-copy">
+                  Already have an account? <Link to="/login">Sign in here</Link>
+                </p>
+              </div>
+            </div>
+          ) : null}
+
+          {activePanel === "default" ? (
+            <>
+              <div className="terminal-card" aria-hidden="true">
+                <div className="terminal-head">
+                  <span className="dot red" />
+                  <span className="dot yellow" />
+                  <span className="dot green" />
+                  <span className="terminal-title">debug-session.js</span>
+                </div>
+
+                <div className="terminal-body">
+                  <div className="code-line line-1">const score = bugsFixed * speed;</div>
+                  <div className="code-line line-2">if (tests.pass()) submit(score);</div>
+                  <div className="code-line line-3">leaderboard.update(playerId);</div>
+                  <div className="typing-line">run debug-quest --mode ranked</div>
+                </div>
+              </div>
+
+              <div className="floating-pill pill-1">Easy to Hard Tracks</div>
+              <div className="floating-pill pill-2">Realtime Feedback</div>
+              <div className="floating-pill pill-3">Code Like Production</div>
+            </>
+          ) : null}
         </section>
       </main>
 
