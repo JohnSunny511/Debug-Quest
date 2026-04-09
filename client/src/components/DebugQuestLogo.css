@@ -1,0 +1,64 @@
+.debug-quest-logo {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.debug-quest-logo__svg {
+  display: block;
+  height: auto;
+}
+
+.debug-quest-logo__link {
+  display: inline-flex;
+  text-decoration: none;
+}
+
+.debug-quest-logo--full {
+  padding: 0;
+}
+
+.debug-quest-logo--mark {
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow:
+    0 16px 34px rgba(15, 23, 42, 0.18),
+    inset 0 1px 0 rgba(255, 255, 255, 0.75);
+}
+
+.debug-quest-logo--sm.debug-quest-logo--full .debug-quest-logo__svg {
+  width: 124px;
+}
+
+.debug-quest-logo--md.debug-quest-logo--full .debug-quest-logo__svg {
+  width: 166px;
+}
+
+.debug-quest-logo--lg.debug-quest-logo--full .debug-quest-logo__svg {
+  width: 240px;
+}
+
+.debug-quest-logo--sm.debug-quest-logo--mark {
+  padding: 7px;
+}
+
+.debug-quest-logo--sm.debug-quest-logo--mark .debug-quest-logo__svg {
+  width: 38px;
+}
+
+.debug-quest-logo--md.debug-quest-logo--mark {
+  padding: 9px;
+}
+
+.debug-quest-logo--md.debug-quest-logo--mark .debug-quest-logo__svg {
+  width: 48px;
+}
+
+.debug-quest-logo--lg.debug-quest-logo--mark {
+  padding: 12px;
+}
+
+.debug-quest-logo--lg.debug-quest-logo--mark .debug-quest-logo__svg {
+  width: 62px;
+}

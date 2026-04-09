@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
+import DebugQuestLogo from "./DebugQuestLogo";
 import { clearStoredSession } from "../utils/authSession";
 
 function UserTopNav({ breadcrumbItems = [] }) {
@@ -78,45 +79,13 @@ function UserTopNav({ breadcrumbItems = [] }) {
             style={{
               display: "flex",
               alignItems: "center",
-              gap: "0.75rem",
               background: "transparent",
               border: "none",
               cursor: "pointer",
               padding: 0,
             }}
           >
-            <span
-              style={{
-                width: "46px",
-                height: "46px",
-                borderRadius: "15px",
-                display: "inline-flex",
-                alignItems: "center",
-                justifyContent: "center",
-                background: "linear-gradient(135deg, #2563eb, #0891b2 55%, #14b8a6)",
-                color: "white",
-                fontWeight: 800,
-                fontSize: "0.95rem",
-                letterSpacing: "0.08em",
-                boxShadow: "0 14px 26px rgba(14, 165, 233, 0.22)",
-                flexShrink: 0,
-              }}
-            >
-              DQ
-            </span>
-            <span
-              style={{
-                fontSize: "1.35rem",
-                fontWeight: 800,
-                letterSpacing: "0.03em",
-                fontFamily: "'Trebuchet MS', 'Segoe UI', sans-serif",
-                background: "linear-gradient(90deg, #f8fafc, #bfdbfe 45%, #67e8f9)",
-                WebkitBackgroundClip: "text",
-                WebkitTextFillColor: "transparent",
-              }}
-            >
-              Debug Quest
-            </span>
+            <DebugQuestLogo size="sm" />
           </button>
 
           <span

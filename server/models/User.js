@@ -25,6 +25,7 @@ const UserSchema = new mongoose.Schema({
         challengeKey: { type: String, required: true },
         failedAttempts: { type: Number, default: 0 },
         penaltyPoints: { type: Number, default: 0 },
+        answerRevealed: { type: Boolean, default: false },
       },
     ],
     default: [],

@@ -3,6 +3,7 @@ import axios from "axios";
 import { GoogleLogin } from "@react-oauth/google";
 import { Link, useNavigate } from "react-router-dom";
 import { API_BASE_URL } from "../config/api";
+import DebugQuestLogo from "../components/DebugQuestLogo";
 import "./Login.css";
 
 function Login() {
@@ -73,8 +74,7 @@ function Login() {
 
       <header className="login-header">
         <Link className="login-brand" to="/">
-          <span className="login-brand-mark">&lt;/&gt;</span>
-          <span className="login-brand-name">Debug Quest</span>
+          <DebugQuestLogo size="md" />
         </Link>
 
         <nav className="login-nav">

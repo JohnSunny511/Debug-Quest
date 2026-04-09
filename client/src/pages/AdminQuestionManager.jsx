@@ -1,7 +1,8 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import Editor from "@monaco-editor/react";
 import { API_BASE_URL } from "../config/api";
 import AdminLogoutButton from "../components/AdminLogoutButton";
+import { calculateChangePercentage } from "../utils/countCodeChanges";
 
 const API_BASE = `${API_BASE_URL}/api/dashboard/internal/questions`;
 
@@ -15,7 +16,8 @@ function AdminQuestionManager() {
   const [hints, setHints] = useState([]);
   const [language, setLanguage] = useState("python");
   const [difficulty, setDifficulty] = useState("easy");
-  const [maxChangePercentage, setMaxChangePercentage] = useState("20");
+  const [maxChangePercentage, setMaxChangePercentage] = useState("");
+  const [hasCustomTolerance, setHasCustomTolerance] = useState(false);
   const [questions, setQuestions] = useState([]);
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -60,6 +62,42 @@ function AdminQuestionManager() {
     loadQuestions();
   }, [loadQuestions]);
 
+  const minimumChangePercentage = useMemo(() => {
+    if (!questionText.trim() || !answerText.trim()) {
+      return null;
+    }
+
+    const calculated = calculateChangePercentage(questionText, answerText, language);
+    if (calculated < 0 || Number.isNaN(calculated)) {
+      return null;
+    }
+
+    return Math.min(100, calculated);
+  }, [answerText, language, questionText]);
+
+  useEffect(() => {
+    if (minimumChangePercentage === null) {
+      if (!hasCustomTolerance) {
+        setMaxChangePercentage("");
+      }
+      return;
+    }
+
+    const formattedMinimum = String(minimumChangePercentage);
+    setMaxChangePercentage((previousValue) => {
+      const previousNumber = Number(previousValue);
+      if (!Number.isFinite(previousNumber)) {
+        return formattedMinimum;
+      }
+
+      if (!hasCustomTolerance || previousNumber < minimumChangePercentage) {
+        return formattedMinimum;
+      }
+
+      return previousValue;
+    });
+  }, [hasCustomTolerance, minimumChangePercentage]);
+
   const resetForm = () => {
     setQuestionName("");
     setDescription("");
@@ -70,7 +108,8 @@ function AdminQuestionManager() {
     setHints([]);
     setLanguage("python");
     setDifficulty("easy");
-    setMaxChangePercentage("20");
+    setMaxChangePercentage("");
+    setHasCustomTolerance(false);
   };
 
   const updateHintCount = (value) => {
@@ -83,6 +122,64 @@ function AdminQuestionManager() {
 
   const updateHintValue = (index, value) => {
     setHints((prev) => prev.map((hint, hintIndex) => (hintIndex === index ? value : hint)));
+  };
+
+  const handleMaxChangePercentageChange = (value) => {
+    if (value === "") {
+      if (minimumChangePercentage === null) {
+        setHasCustomTolerance(false);
+        setMaxChangePercentage("");
+        return;
+      }
+
+      setHasCustomTolerance(false);
+      setMaxChangePercentage(String(minimumChangePercentage));
+      return;
+    }
+
+    if (!/^\d*\.?\d*$/.test(value)) {
+      return;
+    }
+
+    setMaxChangePercentage(value);
+  };
+
+  const commitMaxChangePercentage = (rawValue) => {
+    if (rawValue === "" || rawValue === ".") {
+      if (minimumChangePercentage === null) {
+        setHasCustomTolerance(false);
+        setMaxChangePercentage("");
+        return;
+      }
+
+      setHasCustomTolerance(false);
+      setMaxChangePercentage(String(minimumChangePercentage));
+      return;
+    }
+
+    const parsedValue = Number(rawValue);
+    if (!Number.isFinite(parsedValue)) {
+      return;
+    }
+
+    const effectiveMinimum = minimumChangePercentage ?? 0;
+    const boundedValue = Math.min(100, parsedValue);
+    const nextValue = Math.max(effectiveMinimum, boundedValue);
+
+    setHasCustomTolerance(nextValue > effectiveMinimum);
+    setMaxChangePercentage(String(nextValue));
+  };
+
+  const adjustMaxChangePercentage = (delta) => {
+    const effectiveMinimum = minimumChangePercentage ?? 0;
+    const currentValue =
+      maxChangePercentage === "" || !Number.isFinite(Number(maxChangePercentage))
+        ? effectiveMinimum
+        : Number(maxChangePercentage);
+    const nextValue = Math.min(100, Math.max(effectiveMinimum, Number((currentValue + delta).toFixed(2))));
+
+    setHasCustomTolerance(nextValue > effectiveMinimum);
+    setMaxChangePercentage(String(nextValue));
   };
 
   const handleAddQuestion = async (event) => {
@@ -282,24 +379,73 @@ function AdminQuestionManager() {
                 <label style={{ display: "block", marginBottom: "0.4rem", color: "#cbd5e1" }}>
                   Max Change %
                 </label>
-                <input
-                  type="number"
-                  min="0"
-                  max="100"
-                  step="0.01"
-                  value={maxChangePercentage}
-                  onChange={(event) => setMaxChangePercentage(event.target.value)}
-                  placeholder="e.g. 20"
-                  style={{
-                    width: "100%",
-                    boxSizing: "border-box",
-                    background: "#0f172a",
-                    color: "#f1f5f9",
-                    border: "1px solid #334155",
-                    borderRadius: "8px",
-                    padding: "0.65rem",
-                  }}
-                />
+                <div style={{ display: "flex", gap: "0.35rem", alignItems: "stretch" }}>
+                  <input
+                    type="number"
+                    min={minimumChangePercentage ?? 0}
+                    max="100"
+                    step="0.01"
+                    value={maxChangePercentage}
+                    onChange={(event) => handleMaxChangePercentageChange(event.target.value)}
+                    onBlur={(event) => commitMaxChangePercentage(event.target.value)}
+                    placeholder={minimumChangePercentage === null ? "Auto-calculated" : String(minimumChangePercentage)}
+                    style={{
+                      flex: 1,
+                      minWidth: 0,
+                      boxSizing: "border-box",
+                      background: "#0f172a",
+                      color: "#f1f5f9",
+                      border: "1px solid #334155",
+                      borderRadius: "8px",
+                      padding: "0.65rem",
+                    }}
+                  />
+                  <div style={{ display: "flex", flexDirection: "column", gap: "0.2rem" }}>
+                    <button
+                      type="button"
+                      onClick={() => adjustMaxChangePercentage(0.5)}
+                      aria-label="Increase tolerance"
+                      style={{
+                        width: "22px",
+                        height: "18px",
+                        border: "1px solid #475569",
+                        borderRadius: "5px",
+                        background: "#1e293b",
+                        color: "#f8fafc",
+                        cursor: "pointer",
+                        fontSize: "0.6rem",
+                        lineHeight: 1,
+                        padding: 0,
+                      }}
+                    >
+                      ▲
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => adjustMaxChangePercentage(-0.5)}
+                      aria-label="Decrease tolerance"
+                      style={{
+                        width: "22px",
+                        height: "18px",
+                        border: "1px solid #475569",
+                        borderRadius: "5px",
+                        background: "#1e293b",
+                        color: "#f8fafc",
+                        cursor: "pointer",
+                        fontSize: "0.6rem",
+                        lineHeight: 1,
+                        padding: 0,
+                      }}
+                    >
+                      ▼
+                    </button>
+                  </div>
+                </div>
+                <p style={{ margin: "0.45rem 0 0", color: "#94a3b8", fontSize: "0.8rem", lineHeight: 1.5 }}>
+                  {minimumChangePercentage === null
+                    ? "Enter both buggy code and correct answer to auto-calculate the minimum change percentage."
+                    : `Minimum auto-calculated diff: ${minimumChangePercentage}%. You can increase tolerance above this, but not save below it.`}
+                </p>
               </div>
               <div style={{ width: "180px", maxWidth: "100%" }}>
                 <label style={{ display: "block", marginBottom: "0.4rem", color: "#cbd5e1" }}>
@@ -538,7 +684,7 @@ function AdminQuestionManager() {
                         flexWrap: "wrap",
                       }}
                     >
-                      <div style={{ display: "flex", alignItems: "center", gap: "0.6rem" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: "0.6rem", flexWrap: "wrap" }}>
                         <button
                           type="button"
                           onClick={() => toggleExpand(itemId)}
@@ -557,27 +703,44 @@ function AdminQuestionManager() {
                         <strong>{item.questionName}</strong>
                       </div>
 
-                      <span
-                        style={{
-                          fontSize: "0.8rem",
-                          background: "#1e3a8a",
-                          padding: "0.2rem 0.5rem",
-                          borderRadius: "999px",
-                          marginRight: "0.4rem",
-                        }}
-                      >
-                        {(item.difficulty || "").toUpperCase()}
-                      </span>
-                      <span
-                        style={{
-                          fontSize: "0.8rem",
-                          background: "#334155",
-                          padding: "0.2rem 0.5rem",
-                          borderRadius: "999px",
-                        }}
-                      >
-                        {String(item.language || "text").toUpperCase()}
-                      </span>
+                      <div style={{ display: "flex", alignItems: "center", gap: "0.45rem", flexWrap: "wrap" }}>
+                        <span
+                          style={{
+                            fontSize: "0.8rem",
+                            background: "#1e3a8a",
+                            padding: "0.2rem 0.5rem",
+                            borderRadius: "999px",
+                          }}
+                        >
+                          {(item.difficulty || "").toUpperCase()}
+                        </span>
+                        <span
+                          style={{
+                            fontSize: "0.8rem",
+                            background: "#334155",
+                            padding: "0.2rem 0.5rem",
+                            borderRadius: "999px",
+                          }}
+                        >
+                          {String(item.language || "text").toUpperCase()}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => handleDelete(item._id)}
+                          disabled={busy}
+                          style={{
+                            border: "none",
+                            borderRadius: "6px",
+                            padding: "0.4rem 0.75rem",
+                            background: busy ? "#7f1d1d" : "#dc2626",
+                            color: "white",
+                            cursor: busy ? "not-allowed" : "pointer",
+                            fontWeight: 600,
+                          }}
+                        >
+                          Remove
+                        </button>
+                      </div>
                     </div>
 
                     {isExpanded && (
@@ -592,6 +755,12 @@ function AdminQuestionManager() {
                         </p>
                         <p style={{ margin: "0 0 0.6rem", color: "#cbd5e1" }}>
                           <strong>Hints:</strong> {Array.isArray(item.hints) ? item.hints.length : 0}
+                        </p>
+                        <p style={{ margin: "0 0 0.6rem", color: "#cbd5e1" }}>
+                          <strong>Minimum Auto Diff %:</strong>{" "}
+                          {typeof item.minimumChangePercentage === "number"
+                            ? item.minimumChangePercentage
+                            : "Not available"}
                         </p>
                         <p style={{ margin: "0 0 0.6rem", color: "#cbd5e1" }}>
                           <strong>Max Change %:</strong>{" "}
@@ -664,21 +833,6 @@ function AdminQuestionManager() {
                             }}
                           />
                         </div>
-                        <button
-                          type="button"
-                          onClick={() => handleDelete(item._id)}
-                          disabled={busy}
-                          style={{
-                            border: "none",
-                            borderRadius: "6px",
-                            padding: "0.4rem 0.75rem",
-                            background: busy ? "#7f1d1d" : "#dc2626",
-                            color: "white",
-                            cursor: busy ? "not-allowed" : "pointer",
-                          }}
-                        >
-                          Remove
-                        </button>
                       </div>
                     )}
                   </div>

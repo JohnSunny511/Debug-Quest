@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import axios from "axios";
 import { Link, useNavigate } from "react-router-dom";
 import { API_BASE_URL } from "../config/api";
+import DebugQuestLogo from "./DebugQuestLogo";
 import "./Signup.css";
 
 function Signup() {
@@ -50,8 +51,7 @@ function Signup() {
 
       <header className="signup-header">
         <Link className="signup-brand" to="/">
-          <span className="signup-brand-mark">&lt;/&gt;</span>
-          <span className="signup-brand-name">Debug Quest</span>
+          <DebugQuestLogo size="md" />
         </Link>
 
         <nav className="signup-nav">

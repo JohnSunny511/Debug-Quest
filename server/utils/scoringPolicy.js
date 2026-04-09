@@ -1,4 +1,5 @@
 const SUCCESS_POINTS = 10;
+const ANSWER_REVEAL_SUCCESS_POINTS = 5;
 const WRONG_OUTPUT_PENALTY = 1;
 const RUNTIME_FAILURE_PENALTY = 2;
 const MAX_PENALTY_PER_CHALLENGE = 3;
@@ -9,6 +10,7 @@ function normalizeChallengeProgress(user) {
         challengeKey: String(entry?.challengeKey || ""),
         failedAttempts: Number(entry?.failedAttempts || 0),
         penaltyPoints: Number(entry?.penaltyPoints || 0),
+        answerRevealed: entry?.answerRevealed === true,
       }))
     : [];
 }
@@ -55,6 +57,8 @@ function buildFailureScoreUpdate(user, challengeKey, failureType) {
 }
 
 module.exports = {
+  ANSWER_REVEAL_SUCCESS_POINTS,
   SUCCESS_POINTS,
   buildFailureScoreUpdate,
+  normalizeChallengeProgress,
 };

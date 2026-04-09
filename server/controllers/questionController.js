@@ -4,7 +4,12 @@ const mongoose = require("mongoose");
 const { z } = require("zod");
 const axios = require("axios");
 const { calculateChangeMetrics, normalizeLanguage } = require("../utils/codeChangeMetrics");
-const { SUCCESS_POINTS, buildFailureScoreUpdate } = require("../utils/scoringPolicy");
+const {
+  ANSWER_REVEAL_SUCCESS_POINTS,
+  SUCCESS_POINTS,
+  buildFailureScoreUpdate,
+  normalizeChallengeProgress,
+} = require("../utils/scoringPolicy");
 
 const LANGUAGE_CONFIG = {
   python: { version: "3.10.0" },
@@ -142,6 +147,31 @@ function withResolvedLanguage(question) {
   return payload;
 }
 
+function getChallengeProgressEntry(user, challengeKey) {
+  return normalizeChallengeProgress(user).find((entry) => entry.challengeKey === challengeKey) || null;
+}
+
+function serializeQuestionForUser(question, user, role) {
+  const payload = withResolvedLanguage(question);
+  const challengeKey = `question:${String(payload?._id || "")}`;
+  const challengeEntry = challengeKey ? getChallengeProgressEntry(user, challengeKey) : null;
+  const answerUnlocked = role === "admin" || challengeEntry?.answerRevealed === true;
+  const hasCorrectAnswer = typeof payload?.correctAnswer === "string" && payload.correctAnswer.trim().length > 0;
+
+  if (!answerUnlocked) {
+    delete payload.correctAnswer;
+  }
+
+  return {
+    ...payload,
+    hasCorrectAnswer,
+    answerUnlocked,
+    pointsOnSuccess: answerUnlocked ? ANSWER_REVEAL_SUCCESS_POINTS : SUCCESS_POINTS,
+    fullPointsOnSuccess: SUCCESS_POINTS,
+    reducedPointsOnSuccess: ANSWER_REVEAL_SUCCESS_POINTS,
+  };
+}
+
 function toLocalDateKey(value = new Date()) {
   const date = value instanceof Date ? value : new Date(value);
   const year = date.getFullYear();
@@ -169,7 +199,8 @@ exports.getQuestionsByLevel = async (req, res) => {
     if (!questions.length) {
       return res.status(404).json({ error: "No questions found for this level" });
     }
-    res.json(questions.map(withResolvedLanguage));
+    const user = await User.findById(req.user.id).lean();
+    res.json(questions.map((question) => serializeQuestionForUser(question, user, req.user.role)));
   } catch (_err) {
     res.status(500).json({ error: "Server error" });
   }
@@ -193,9 +224,74 @@ exports.getQuestionByLevel = async (req, res) => {
     if (!question) {
       return res.status(404).json({ error: "Question not found" });
     }
-    res.json(withResolvedLanguage(question));
+    const user = await User.findById(req.user.id).lean();
+    res.json(serializeQuestionForUser(question, user, req.user.role));
   } catch (_err) {
     res.status(500).json({ error: "Server error" });
+  }
+};
+
+// POST /api/questions/:questionId/reveal-answer
+exports.revealAnswerHandler = async (req, res) => {
+  try {
+    const parsed = z
+      .object({
+        questionId: z.string().refine((value) => mongoose.Types.ObjectId.isValid(value), {
+          message: "Invalid question reference.",
+        }),
+      })
+      .safeParse(req.params);
+
+    if (!parsed.success) {
+      return res.status(400).json({ message: parsed.error.issues[0]?.message || "Invalid question request" });
+    }
+
+    const { questionId } = parsed.data;
+    const question = await Question.findById(questionId);
+    if (!question) {
+      return res.status(404).json({ message: "Question not found" });
+    }
+
+    const user = await User.findById(req.user.id).lean();
+    if (!user) {
+      return res.status(404).json({ message: "User not found." });
+    }
+
+    const challengeKey = `question:${String(question._id)}`;
+    const progress = normalizeChallengeProgress(user);
+    const entryIndex = progress.findIndex((entry) => entry.challengeKey === challengeKey);
+    const currentEntry =
+      entryIndex >= 0
+        ? progress[entryIndex]
+        : { challengeKey, failedAttempts: 0, penaltyPoints: 0, answerRevealed: false };
+
+    if (!currentEntry.answerRevealed) {
+      const nextEntry = {
+        ...currentEntry,
+        answerRevealed: true,
+      };
+
+      if (entryIndex >= 0) {
+        progress[entryIndex] = nextEntry;
+      } else {
+        progress.push(nextEntry);
+      }
+
+      await User.findByIdAndUpdate(req.user.id, {
+        $set: {
+          challengeProgress: progress,
+        },
+      });
+    }
+
+    return res.json({
+      correctAnswer: String(question.correctAnswer || ""),
+      pointsOnSuccess: ANSWER_REVEAL_SUCCESS_POINTS,
+      fullPointsOnSuccess: SUCCESS_POINTS,
+      message: `Answer revealed. Solving this question now awards ${ANSWER_REVEAL_SUCCESS_POINTS} points instead of ${SUCCESS_POINTS}.`,
+    });
+  } catch (_err) {
+    return res.status(500).json({ message: "Server error." });
   }
 };
 
@@ -241,10 +337,13 @@ exports.submitHandler = async (req, res) => {
       return res.status(404).json({ message: "User not found." });
     }
 
+    const challengeKey = `question:${String(question._id)}`;
+    const challengeEntry = getChallengeProgressEntry(user, challengeKey);
+    const answerWasRevealed = challengeEntry?.answerRevealed === true;
+    const successPoints = answerWasRevealed ? ANSWER_REVEAL_SUCCESS_POINTS : SUCCESS_POINTS;
     const executed = await executeSubmissionCode(question.language, code);
     const expectedOutput = await resolveExpectedOutput(question);
     const expectedOutputDisplay = String(question.expected || "").trim() || expectedOutput;
-    const challengeKey = `question:${String(question._id)}`;
 
     if (!executed.succeeded) {
       const failureUpdate = buildFailureScoreUpdate(user, challengeKey, "runtime");
@@ -329,18 +428,21 @@ exports.submitHandler = async (req, res) => {
             .sort((a, b) => String(a.date).localeCompare(String(b.date)))
             .slice(-365),
         },
-        $inc: { points: SUCCESS_POINTS },
+        $inc: { points: successPoints },
       });
 
       return res.json({
-        message: "Correct! Points awarded.",
+        message: answerWasRevealed
+          ? `Correct! Answer was viewed, so ${successPoints} points awarded instead of ${SUCCESS_POINTS}.`
+          : "Correct! Points awarded.",
         isCorrect: true,
-        pointsDelta: SUCCESS_POINTS,
-        points: Number(user.points || 0) + SUCCESS_POINTS,
+        pointsDelta: successPoints,
+        points: Number(user.points || 0) + successPoints,
         expectedOutput: expectedOutputDisplay,
         actualOutput: executed.output,
         changePercentage: changeMetrics.percentage,
         maxChangePercentage,
+        answerWasRevealed,
       });
     }
   } catch (_err) {

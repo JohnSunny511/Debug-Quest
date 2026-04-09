@@ -2,6 +2,7 @@ const Question = require("../models/Question");
 const mongoose = require("mongoose");
 const { z } = require("zod");
 const { sanitizeFreeText, sanitizeText } = require("../utils/security");
+const { calculateChangeMetrics, normalizeLanguage } = require("../utils/codeChangeMetrics");
 
 const SUPPORTED_LANGUAGES = new Set(["python", "javascript", "c", "text"]);
 
@@ -54,6 +55,10 @@ function resolveLanguageForDisplay(value, fallbackText = "") {
 
 function toAdminQuestionShape(question) {
   const resolvedLanguage = resolveLanguageForDisplay(question.language, question.code);
+  const minimumChangePercentage = Math.min(
+    100,
+    calculateChangeMetrics(question.code || "", question.correctAnswer || question.expected || "", resolvedLanguage).percentage
+  );
   return {
     _id: question._id,
     questionName: question.title || "",
@@ -64,6 +69,7 @@ function toAdminQuestionShape(question) {
     hints: Array.isArray(question.hints) ? question.hints : [],
     difficulty: question.level,
     language: resolvedLanguage,
+    minimumChangePercentage,
     maxChangePercentage:
       typeof question.maxChangePercentage === "number" ? question.maxChangePercentage : "",
   };
@@ -92,7 +98,7 @@ exports.createAdminQuestion = async (req, res) => {
         difficulty: z.enum(["easy", "medium", "hard"]),
         language: z.string().max(20).optional().default("text"),
         hints: z.array(z.string().min(1).max(1000)).max(10).optional().default([]),
-        maxChangePercentage: z.coerce.number().min(0).max(100),
+        maxChangePercentage: z.coerce.number().min(0).max(100).optional(),
       })
       .safeParse({
         questionName: sanitizeText(req.body?.questionName, { maxLength: 120, allowNewlines: false }),
@@ -113,7 +119,10 @@ exports.createAdminQuestion = async (req, res) => {
               )
               .filter((hint) => String(hint || "").trim().length > 0)
           : [],
-        maxChangePercentage: req.body?.maxChangePercentage,
+        maxChangePercentage:
+          req.body?.maxChangePercentage === "" || req.body?.maxChangePercentage == null
+            ? undefined
+            : req.body?.maxChangePercentage,
       });
 
     if (!parsed.success) {
@@ -122,9 +131,14 @@ exports.createAdminQuestion = async (req, res) => {
 
     const { questionName, description, questionText, answerText, expectedOutcome, difficulty, language, hints, maxChangePercentage } = parsed.data;
     const selectedLanguage = normalizeLanguageForStorage(language, questionText);
+    const minimumChangePercentage = Math.min(
+      100,
+      calculateChangeMetrics(questionText, answerText, normalizeLanguage(selectedLanguage)).percentage
+    );
     const lastQuestion = await Question.findOne({ level: difficulty }).sort({ id: -1 });
     const nextId = (lastQuestion?.id || 0) + 1;
     const resolvedExpected = String(expectedOutcome || "").trim() || answerText.trim();
+    const resolvedMaxChangePercentage = Math.max(maxChangePercentage ?? minimumChangePercentage, minimumChangePercentage);
 
     const question = await Question.create({
       id: nextId,
@@ -136,7 +150,7 @@ exports.createAdminQuestion = async (req, res) => {
       level: difficulty,
       correctAnswer: answerText.trim(),
       hints: hints.map((hint) => hint.trim()).filter(Boolean),
-      maxChangePercentage,
+      maxChangePercentage: resolvedMaxChangePercentage,
       source: "admin",
     });
 

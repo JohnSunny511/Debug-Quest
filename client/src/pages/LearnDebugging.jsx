@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import DebugQuestLogo from "../components/DebugQuestLogo";
 import { LEARNING_MODULES, LEARNING_REFERENCES } from "./learnRoadmapData";
 import {
   loadLearningProgress,
@@ -39,7 +40,7 @@ function LearnDebugging() {
 
       <header className="learn-roadmap-header">
         <div className="learn-roadmap-brand">
-          <span className="roadmap-badge">DQ</span>
+          <DebugQuestLogo size="md" variant="mark" />
           <div>
             <p className="roadmap-kicker">Debug Quest Learning Hub</p>
             <h1>Debugging Roadmap</h1>

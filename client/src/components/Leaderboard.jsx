@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import axios from "axios";
 import { Link } from "react-router-dom";
 import { API_BASE_URL } from "../config/api";
+import DebugQuestLogo from "./DebugQuestLogo";
 import {
   buildLeaderboardActivityWindow,
   readLocalLeaderboardActivity,
@@ -193,8 +194,7 @@ function Leaderboard() {
       ) : (
         <header className="leaderboard-header">
           <Link className="leaderboard-brand" to="/">
-            <span className="leaderboard-brand-mark">&lt;/&gt;</span>
-            <span className="leaderboard-brand-name">Debug Quest</span>
+            <DebugQuestLogo size="md" />
           </Link>
 
           <nav className="leaderboard-nav">

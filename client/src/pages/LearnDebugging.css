@@ -56,19 +56,8 @@
 
 .learn-roadmap-brand {
   display: flex;
-  gap: 12px;
-}
-
-.roadmap-badge {
-  width: 42px;
-  height: 42px;
-  border-radius: 12px;
-  display: inline-flex;
   align-items: center;
-  justify-content: center;
-  background: linear-gradient(130deg, #1be8ff, #39de9d);
-  color: #05223c;
-  font-weight: 800;
+  gap: 12px;
 }
 
 .roadmap-kicker {

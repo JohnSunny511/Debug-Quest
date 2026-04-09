@@ -74,28 +74,8 @@
 .leaderboard-brand {
   display: inline-flex;
   align-items: center;
-  gap: 10px;
   color: #f4faff;
   text-decoration: none;
-}
-
-.leaderboard-brand-mark {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 36px;
-  height: 36px;
-  border-radius: 10px;
-  background: linear-gradient(135deg, #00b4f6, #0de0a8);
-  color: #05203b;
-  font-weight: 800;
-  box-shadow: 0 8px 20px rgba(0, 180, 246, 0.3);
-}
-
-.leaderboard-brand-name {
-  font-size: 1.1rem;
-  font-weight: 700;
-  letter-spacing: 0.04em;
 }
 
 .leaderboard-nav {

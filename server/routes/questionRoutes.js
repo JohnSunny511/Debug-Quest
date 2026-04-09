@@ -5,6 +5,7 @@ const router = express.Router();
 const {
   getQuestionsByLevel,
   getQuestionByLevel,
+  revealAnswerHandler,
   submitHandler
 } = require("../controllers/questionController");
 const { authenticateUser } = require("../middleware/authMiddleware");
@@ -16,6 +17,10 @@ router.get("/:level", authenticateUser, getQuestionsByLevel);
 // GET single question by level + id
 // /api/questions/easy/1
 router.get("/:level/:id", authenticateUser, getQuestionByLevel);
+
+// POST reveal the correct answer for a question
+// /api/questions/:questionId/reveal-answer
+router.post("/:questionId/reveal-answer", authenticateUser, revealAnswerHandler);
 
 // POST submit code
 // /api/questions/submit

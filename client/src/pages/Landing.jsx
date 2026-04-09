@@ -3,6 +3,7 @@ import axios from "axios";
 import { GoogleLogin } from "@react-oauth/google";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { API_BASE_URL } from "../config/api";
+import DebugQuestLogo from "../components/DebugQuestLogo";
 import { clearStoredSession, validateStoredSession } from "../utils/authSession";
 import "./Landing.css";
 
@@ -177,8 +178,7 @@ function Landing() {
 
       <header className="landing-header">
         <Link className="landing-brand" to="/">
-          <span className="brand-mark">&lt;/&gt;</span>
-          <span className="brand-name">Debug Quest</span>
+          <DebugQuestLogo size="md" />
         </Link>
 
         <div className="landing-nav">

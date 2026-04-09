@@ -1,4 +1,5 @@
 import React from "react";
+import DebugQuestLogo from "./DebugQuestLogo";
 
 function PageLoader({ title = "Preparing Debug Quest", subtitle = "Loading your next view..." }) {
   return (
@@ -27,22 +28,7 @@ function PageLoader({ title = "Preparing Debug Quest", subtitle = "Loading your 
         }}
       >
         <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "18px" }}>
-          <span
-            style={{
-              width: "42px",
-              height: "42px",
-              borderRadius: "14px",
-              display: "inline-flex",
-              alignItems: "center",
-              justifyContent: "center",
-              background: "linear-gradient(135deg, #00b4f6, #0de0a8)",
-              color: "#05203b",
-              fontWeight: 800,
-              boxShadow: "0 12px 24px rgba(0, 180, 246, 0.28)",
-            }}
-          >
-            &lt;/&gt;
-          </span>
+          <DebugQuestLogo size="sm" variant="mark" />
           <div>
             <p style={{ margin: 0, color: "#8fe8ff", fontSize: "0.78rem", fontWeight: 700, letterSpacing: "0.12em", textTransform: "uppercase" }}>
               Debug Quest

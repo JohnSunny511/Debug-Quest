@@ -39,6 +39,8 @@ function QuestionDetail() {
   const [pageError, setPageError] = useState("");
   const [revealedHints, setRevealedHints] = useState([]);
   const [areHintsVisible, setAreHintsVisible] = useState(false);
+  const [isCorrectAnswerVisible, setIsCorrectAnswerVisible] = useState(false);
+  const [isRevealAnswerLoading, setIsRevealAnswerLoading] = useState(false);
   const [solvedQuestions, setSolvedQuestions] = useState(() => {
     const username = localStorage.getItem("username") || "";
     return readUserProgress(username, "solvedQuestions", []);
@@ -123,6 +125,8 @@ function QuestionDetail() {
         setChangePercentage(0);
         setRevealedHints([]);
         setAreHintsVisible(false);
+        setIsCorrectAnswerVisible(res.data?.answerUnlocked === true);
+        setIsRevealAnswerLoading(false);
         setCurrentUserRole(localStorage.getItem("role") || "user");
       } catch (error) {
         const status = error?.response?.status;
@@ -378,6 +382,48 @@ function QuestionDetail() {
     }
   };
 
+  const revealAnswer = async () => {
+    if (!question?._id || isRevealAnswerLoading) return;
+
+    try {
+      setIsRevealAnswerLoading(true);
+      const token = localStorage.getItem("token");
+      const res = await axios.post(
+        `${API_BASE_URL}/api/questions/${question._id}/reveal-answer`,
+        {},
+        {
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+        }
+      );
+
+      setQuestion((prev) =>
+        prev
+          ? {
+              ...prev,
+              correctAnswer: res.data?.correctAnswer || prev.correctAnswer || "",
+              answerUnlocked: true,
+              hasCorrectAnswer: true,
+              pointsOnSuccess: Number(res.data?.pointsOnSuccess || prev.pointsOnSuccess || 0),
+              fullPointsOnSuccess: Number(res.data?.fullPointsOnSuccess || prev.fullPointsOnSuccess || 0),
+              reducedPointsOnSuccess: Number(
+                res.data?.pointsOnSuccess || prev.reducedPointsOnSuccess || prev.pointsOnSuccess || 0
+              ),
+            }
+          : prev
+      );
+      setIsCorrectAnswerVisible(true);
+      alert(res.data?.message || "Answer revealed.");
+    } catch (_err) {
+      if (isAuthError(_err)) {
+        redirectToLogin(navigate);
+        return;
+      }
+      alert(_err?.response?.data?.message || _err?.message || "Unable to reveal the answer.");
+    } finally {
+      setIsRevealAnswerLoading(false);
+    }
+  };
+
   const reportDiscussionMessage = async (messageId) => {
     try {
       setDiscussionBusy(true);
@@ -449,6 +495,112 @@ function QuestionDetail() {
     typeof question.maxChangePercentage === "number" ? question.maxChangePercentage : null;
   const isWithinThreshold = liveThreshold === null || changePercentage <= liveThreshold;
   const availableHints = Array.isArray(question.hints) ? question.hints.filter(Boolean) : [];
+  const hasCorrectAnswer =
+    question.hasCorrectAnswer === true ||
+    (typeof question.correctAnswer === "string" && question.correctAnswer.trim().length > 0);
+  const fullPointsOnSuccess = Number(question.fullPointsOnSuccess || 10);
+  const reducedPointsOnSuccess = Number(question.reducedPointsOnSuccess || fullPointsOnSuccess);
+  const answerPenaltyPoints = Math.max(0, fullPointsOnSuccess - reducedPointsOnSuccess);
+  const isComparisonLayout = hasCorrectAnswer && isCorrectAnswerVisible;
+  const debugAssistantPanel = (
+    <aside
+      style={{
+        backgroundColor: "#1e293b",
+        border: "2px solid #334155",
+        borderRadius: "0.75rem",
+        boxShadow: "0 4px 12px rgba(0,0,0,0.3)",
+        padding: "1rem",
+        display: "flex",
+        flexDirection: "column",
+        height: "min(620px, 70vh)",
+        minHeight: "420px",
+        maxHeight: "620px",
+        width: "100%",
+      }}
+    >
+      <h2 style={{ margin: 0, marginBottom: "0.8rem", fontSize: "1.1rem", color: "#f8fafc" }}>
+        Debug Assistant
+      </h2>
+      <div
+        style={{
+          flex: 1,
+          minHeight: 0,
+          overflowY: "auto",
+          backgroundColor: "#0f172a",
+          borderRadius: "2rem",
+          border: "10px solid #334155",
+          padding: "0.75rem",
+        }}
+      >
+        {chatMessages.map((message, index) => (
+          <div
+            key={`${message.role}-${index}`}
+            style={{
+              marginBottom: "0.6rem",
+              display: "flex",
+              justifyContent: message.role === "user" ? "flex-end" : "flex-start",
+            }}
+          >
+            <div
+              style={{
+                maxWidth: "88%",
+                padding: "0.55rem 0.7rem",
+                borderRadius: "0.5rem",
+                whiteSpace: "pre-wrap",
+                backgroundColor: message.role === "user" ? "#1d4ed8" : "#334155",
+                color: "#f8fafc",
+                fontSize: "0.9rem",
+                lineHeight: 1.35,
+              }}
+            >
+              <span>{message.text}</span>
+              {message.linkTo ? (
+                <div style={{ marginTop: "0.5rem" }}>
+                  <Link to={message.linkTo} style={{ color: "#bfdbfe", fontWeight: 600 }}>
+                    {message.linkLabel || "Open Runtime Note"}
+                  </Link>
+                </div>
+              ) : null}
+            </div>
+          </div>
+        ))}
+        {chatLoading && <div style={{ color: "#94a3b8", fontSize: "0.85rem" }}>Thinking...</div>}
+        <div ref={chatEndRef} />
+      </div>
+      <form onSubmit={askAI} style={{ display: "flex", gap: "0.5rem", marginTop: "0.75rem", flexWrap: "wrap" }}>
+        <input
+          type="text"
+          value={chatInput}
+          onChange={(event) => setChatInput(event.target.value)}
+          placeholder="Ask about this bug..."
+          style={{
+            flex: "1 1 220px",
+            backgroundColor: "#0f172a",
+            border: "1px solid #334155",
+            borderRadius: "0.45rem",
+            color: "#f1f5f9",
+            padding: "0.55rem 0.7rem",
+            outline: "none",
+          }}
+        />
+        <button
+          type="submit"
+          disabled={chatLoading || !chatInput.trim()}
+          style={{
+            backgroundColor: chatLoading || !chatInput.trim() ? "#475569" : "#2563eb",
+            color: "white",
+            border: "none",
+            borderRadius: "0.45rem",
+            padding: "0.55rem 0.9rem",
+            minWidth: "110px",
+            cursor: chatLoading || !chatInput.trim() ? "not-allowed" : "pointer",
+          }}
+        >
+          Send
+        </button>
+      </form>
+    </aside>
+  );
 
   return (
     <div
@@ -474,11 +626,18 @@ function QuestionDetail() {
           gap: "clamp(16px, 4vw, 36px)",
           alignItems: "flex-start",
           flexWrap: "wrap",
-          maxWidth: "1400px",
+          maxWidth: "1680px",
           margin: "0 auto",
         }}
       >
-        <div style={{ flex: "1 1 900px", minWidth: "min(100%, 320px)", paddingLeft: "clamp(0px, 2vw, 18px)", width: "100%" }}>
+        <div
+          style={{
+            flex: "1 1 1180px",
+            minWidth: "min(100%, 320px)",
+            paddingLeft: "clamp(0px, 1vw, 12px)",
+            width: "100%",
+          }}
+        >
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: ".5rem", flexWrap: "wrap", gap: "10px" }}>
             <h1
               style={{
@@ -496,24 +655,16 @@ function QuestionDetail() {
             Language: {question.language}
           </p>
 
-          <div
-            style={{
-              display: "flex",
-              gap: "1rem",
-              alignItems: "flex-start",
-              flexWrap: "wrap",
-            }}
-          >
+          {isComparisonLayout && (
             <section
               style={{
-                flex: "0 0 320px",
-                width: "min(100%, 360px)",
+                width: "100%",
                 backgroundColor: "#1e293b",
                 border: "1px solid #334155",
                 borderRadius: "0.75rem",
                 padding: "1rem",
                 boxShadow: "0 4px 12px rgba(0,0,0,0.25)",
-                alignSelf: "stretch",
+                marginBottom: "1rem",
               }}
             >
               <p style={{ margin: "0 0 0.75rem", color: "#f8fafc", fontWeight: 700, fontSize: "1.05rem" }}>
@@ -523,38 +674,120 @@ function QuestionDetail() {
                 {question.description?.trim() || "No description provided for this question."}
               </div>
             </section>
+          )}
 
-            <div style={{ flex: "1 1 540px", minWidth: "min(100%, 320px)" }}>
-              <div
+          <div
+            style={{
+              display: "flex",
+              gap: "clamp(12px, 2vw, 20px)",
+              alignItems: "flex-start",
+              flexWrap: isComparisonLayout ? "nowrap" : "wrap",
+            }}
+          >
+            {!isComparisonLayout && (
+              <section
                 style={{
+                  flex: "0 1 280px",
+                  width: "min(100%, 300px)",
+                  backgroundColor: "#1e293b",
                   border: "1px solid #334155",
-                  borderRadius: "0.5rem",
-                  overflow: "hidden",
-                  marginBottom: "1rem",
-                  boxShadow: "0 4px 12px rgba(0,0,0,0.3)",
+                  borderRadius: "0.75rem",
+                  padding: "1rem",
+                  boxShadow: "0 4px 12px rgba(0,0,0,0.25)",
+                  alignSelf: "stretch",
                 }}
               >
-                <Editor
-                  height="320px"
-                  defaultLanguage={question.language.toLowerCase()}
-                  value={question.code}
-                  theme="vs-dark"
-                  onChange={(newValue = "") => {
-                    const effectiveLanguage = resolveCounterLanguage(
-                      question.language,
-                      originalCode,
-                      newValue
-                    );
-                    const rawChangeNum = countChanges(originalCode, newValue, effectiveLanguage);
-                    const changeNum = rawChangeNum < 0 ? 0 : rawChangeNum;
-                    const rawChangePercentage = calculateChangePercentage(originalCode, newValue, effectiveLanguage);
-                    const nextChangePercentage = rawChangePercentage < 0 ? 0 : rawChangePercentage;
-                    setChangeCount(changeNum);
-                    setChangePercentage(nextChangePercentage);
-                    setQuestion((prev) => ({ ...prev, code: newValue }));
+                <p style={{ margin: "0 0 0.75rem", color: "#f8fafc", fontWeight: 700, fontSize: "1.05rem" }}>
+                  Question Description
+                </p>
+                <div style={{ color: "#cbd5e1", whiteSpace: "pre-wrap", lineHeight: 1.65 }}>
+                  {question.description?.trim() || "No description provided for this question."}
+                </div>
+              </section>
+            )}
+
+            <div
+              style={{
+                flex: isComparisonLayout ? "1 1 0" : "1 1 520px",
+                minWidth: isComparisonLayout ? 0 : "min(100%, 360px)",
+              }}
+            >
+              {isComparisonLayout ? (
+                <section
+                  style={{
+                    backgroundColor: "#1e293b",
+                    border: "1px solid #475569",
+                    borderRadius: "0.75rem",
+                    padding: "1rem",
+                    boxShadow: "0 4px 12px rgba(0,0,0,0.25)",
+                    marginBottom: "1rem",
                   }}
-                />
-              </div>
+                >
+                  <p style={{ margin: "0 0 0.75rem", fontSize: "1rem", color: "#f8fafc", fontWeight: 700 }}>
+                    Question
+                  </p>
+                  <div
+                    style={{
+                      border: "1px solid #334155",
+                      borderRadius: "0.5rem",
+                      overflow: "hidden",
+                      boxShadow: "0 4px 12px rgba(0,0,0,0.3)",
+                    }}
+                  >
+                    <Editor
+                      height="320px"
+                      defaultLanguage={question.language.toLowerCase()}
+                      value={question.code}
+                      theme="vs-dark"
+                      onChange={(newValue = "") => {
+                        const effectiveLanguage = resolveCounterLanguage(
+                          question.language,
+                          originalCode,
+                          newValue
+                        );
+                        const rawChangeNum = countChanges(originalCode, newValue, effectiveLanguage);
+                        const changeNum = rawChangeNum < 0 ? 0 : rawChangeNum;
+                        const rawChangePercentage = calculateChangePercentage(originalCode, newValue, effectiveLanguage);
+                        const nextChangePercentage = rawChangePercentage < 0 ? 0 : rawChangePercentage;
+                        setChangeCount(changeNum);
+                        setChangePercentage(nextChangePercentage);
+                        setQuestion((prev) => ({ ...prev, code: newValue }));
+                      }}
+                    />
+                  </div>
+                </section>
+              ) : (
+                <div
+                  style={{
+                    border: "1px solid #334155",
+                    borderRadius: "0.5rem",
+                    overflow: "hidden",
+                    marginBottom: "1rem",
+                    boxShadow: "0 4px 12px rgba(0,0,0,0.3)",
+                  }}
+                >
+                  <Editor
+                    height="320px"
+                    defaultLanguage={question.language.toLowerCase()}
+                    value={question.code}
+                    theme="vs-dark"
+                    onChange={(newValue = "") => {
+                      const effectiveLanguage = resolveCounterLanguage(
+                        question.language,
+                        originalCode,
+                        newValue
+                      );
+                      const rawChangeNum = countChanges(originalCode, newValue, effectiveLanguage);
+                      const changeNum = rawChangeNum < 0 ? 0 : rawChangeNum;
+                      const rawChangePercentage = calculateChangePercentage(originalCode, newValue, effectiveLanguage);
+                      const nextChangePercentage = rawChangePercentage < 0 ? 0 : rawChangePercentage;
+                      setChangeCount(changeNum);
+                      setChangePercentage(nextChangePercentage);
+                      setQuestion((prev) => ({ ...prev, code: newValue }));
+                    }}
+                  />
+                </div>
+              )}
 
               <div style={{ display: "flex", gap: "1rem", marginBottom: "1rem", flexWrap: "wrap" }}>
             <button
@@ -613,7 +846,46 @@ function QuestionDetail() {
                 {areHintsVisible ? "Hide Hints" : "Hint"}
               </button>
             )}
+            {hasCorrectAnswer && (
+              <button
+                type="button"
+                onClick={() => {
+                  if (question.answerUnlocked) {
+                    setIsCorrectAnswerVisible((prev) => !prev);
+                    return;
+                  }
+                  revealAnswer();
+                }}
+                style={{
+                  padding: "0.6rem 1.2rem",
+                  borderRadius: "0.35rem",
+                  border: "none",
+                  cursor: isRevealAnswerLoading ? "wait" : "pointer",
+                  fontWeight: 500,
+                  backgroundColor: isCorrectAnswerVisible ? "#64748b" : "#8b5cf6",
+                  color: "white",
+                  transition: "all 0.3s ease",
+                  opacity: isRevealAnswerLoading ? 0.7 : 1,
+                }}
+                disabled={isRevealAnswerLoading}
+              >
+                {isRevealAnswerLoading
+                  ? "Revealing Answer..."
+                  : isCorrectAnswerVisible
+                    ? "Hide Answer"
+                    : "View Answer"}
+              </button>
+            )}
               </div>
+
+              {hasCorrectAnswer && (
+                <p style={{ margin: "-0.35rem 0 1rem", color: "#c4b5fd", fontSize: "0.95rem", lineHeight: 1.55 }}>
+                  If you get stuck, you can view the answer. Using it reduces this question&apos;s reward by{" "}
+                  <strong style={{ color: "#f8fafc" }}>{answerPenaltyPoints} point(s)</strong>, so you&apos;ll earn{" "}
+                  <strong style={{ color: "#f8fafc" }}>{reducedPointsOnSuccess} point(s)</strong> instead of{" "}
+                  <strong style={{ color: "#f8fafc" }}>{fullPointsOnSuccess}</strong>.
+                </p>
+              )}
 
               {availableHints.length > 0 && areHintsVisible && (
                 <div
@@ -723,108 +995,64 @@ function QuestionDetail() {
                 </div>
               </div>
             </div>
+
+            {isComparisonLayout ? (
+              <div
+                style={{
+                  flex: "1 1 0",
+                  minWidth: 0,
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: "1rem",
+                }}
+              >
+                <section
+                  style={{
+                    backgroundColor: "#1e293b",
+                    border: "1px solid #475569",
+                    borderRadius: "0.75rem",
+                    padding: "1rem",
+                    boxShadow: "0 4px 12px rgba(0,0,0,0.25)",
+                  }}
+                >
+                  <p style={{ margin: "0 0 0.75rem", fontSize: "1rem", color: "#f8fafc", fontWeight: 700 }}>
+                    Answer
+                  </p>
+                  <div
+                    style={{
+                      backgroundColor: "#0f172a",
+                      border: "1px solid #334155",
+                      borderRadius: "0.5rem",
+                      overflow: "hidden",
+                    }}
+                  >
+                    <Editor
+                      height="320px"
+                      defaultLanguage={question.language.toLowerCase()}
+                      value={question.correctAnswer}
+                      theme="vs-dark"
+                      options={{
+                        readOnly: true,
+                        minimap: { enabled: false },
+                        scrollBeyondLastLine: false,
+                      }}
+                    />
+                  </div>
+                  <p style={{ margin: "0.75rem 0 0", color: "#94a3b8", fontSize: "0.9rem", lineHeight: 1.5 }}>
+                    Compare the revealed fix with the buggy code beside it to spot the exact differences.
+                  </p>
+                </section>
+                {debugAssistantPanel}
+              </div>
+            ) : null}
           </div>
         </div>
 
-        <aside
-          style={{
-            flex: "1 1 320px",
-            minWidth: "min(100%, 300px)",
-            backgroundColor: "#1e293b",
-            border: "2px solid #334155",
-            borderRadius: "0.75rem",
-            boxShadow: "0 4px 12px rgba(0,0,0,0.3)",
-            padding: "1rem",
-            display: "flex",
-            flexDirection: "column",
-            height: "min(620px, 70vh)",
-            minHeight: "420px",
-            maxHeight: "620px",
-            width: "100%",
-          }}
-        >
-          <h2 style={{ margin: 0, marginBottom: "0.8rem", fontSize: "1.1rem", color: "#f8fafc" }}>
-            Debug Assistant
-          </h2>
-          <div
-            style={{
-              flex: 1,
-              minHeight: 0,
-              overflowY: "auto",
-              backgroundColor: "#0f172a",
-              borderRadius: "2rem",
-              border: "10px solid #334155",
-              padding: "0.75rem",
-            }}
-          >
-            {chatMessages.map((message, index) => (
-              <div
-                key={`${message.role}-${index}`}
-                style={{
-                  marginBottom: "0.6rem",
-                  display: "flex",
-                  justifyContent: message.role === "user" ? "flex-end" : "flex-start",
-                }}
-              >
-                <div
-                  style={{
-                    maxWidth: "88%",
-                    padding: "0.55rem 0.7rem",
-                    borderRadius: "0.5rem",
-                    whiteSpace: "pre-wrap",
-                    backgroundColor: message.role === "user" ? "#1d4ed8" : "#334155",
-                    color: "#f8fafc",
-                    fontSize: "0.9rem",
-                    lineHeight: 1.35,
-                  }}
-                >
-                  <span>{message.text}</span>
-                  {message.linkTo ? (
-                    <div style={{ marginTop: "0.5rem" }}>
-                      <Link to={message.linkTo} style={{ color: "#bfdbfe", fontWeight: 600 }}>
-                        {message.linkLabel || "Open Runtime Note"}
-                      </Link>
-                    </div>
-                  ) : null}
-                </div>
-              </div>
-            ))}
-            {chatLoading && <div style={{ color: "#94a3b8", fontSize: "0.85rem" }}>Thinking...</div>}
-            <div ref={chatEndRef} />
+        {!isComparisonLayout ? (
+          <div style={{ flex: "0 1 360px", minWidth: "min(100%, 320px)" }}>
+            {debugAssistantPanel}
           </div>
-          <form onSubmit={askAI} style={{ display: "flex", gap: "0.5rem", marginTop: "0.75rem", flexWrap: "wrap" }}>
-            <input
-              type="text"
-              value={chatInput}
-              onChange={(event) => setChatInput(event.target.value)}
-              placeholder="Ask about this bug..."
-              style={{
-                flex: "1 1 220px",
-                backgroundColor: "#0f172a",
-                border: "1px solid #334155",
-                borderRadius: "0.45rem",
-                color: "#f1f5f9",
-                padding: "0.55rem 0.7rem",
-                outline: "none",
-              }}
-            />
-            <button
-              type="submit"
-              disabled={chatLoading || !chatInput.trim()}
-              style={{
-                backgroundColor: chatLoading || !chatInput.trim() ? "#475569" : "#2563eb",
-                color: "white",
-                border: "none",
-                borderRadius: "0.45rem",
-                padding: "0.55rem 0.9rem",
-                minWidth: "110px",
-                cursor: chatLoading || !chatInput.trim() ? "not-allowed" : "pointer",
-              }}
-            >
-              Send
-            </button>
-          </form>
-        </aside>
+        ) : null}
       </div>
 
       <div style={{ maxWidth: "1400px", margin: "1.25rem auto 0", paddingLeft: "clamp(0px, 2vw, 18px)" }}>
