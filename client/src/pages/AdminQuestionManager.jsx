@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import Editor from "@monaco-editor/react";
 import { API_BASE_URL } from "../config/api";
 import AdminLogoutButton from "../components/AdminLogoutButton";
@@ -7,6 +7,9 @@ import { calculateChangePercentage } from "../utils/countCodeChanges";
 const API_BASE = `${API_BASE_URL}/api/dashboard/internal/questions`;
 
 function AdminQuestionManager() {
+  const desktopScale = 0.85;
+  const isDesktopScale = typeof window !== "undefined" && window.innerWidth >= 1024;
+  const pageRef = useRef(null);
   const [questionName, setQuestionName] = useState("");
   const [description, setDescription] = useState("");
   const [questionText, setQuestionText] = useState("");
@@ -24,6 +27,7 @@ function AdminQuestionManager() {
   const [statusMessage, setStatusMessage] = useState("");
   const [showAddForm, setShowAddForm] = useState(true);
   const [expandedItems, setExpandedItems] = useState({});
+  const [desktopScaleOffset, setDesktopScaleOffset] = useState(0);
 
   const readResponseData = async (response) => {
     const contentType = response.headers.get("content-type") || "";
@@ -61,6 +65,27 @@ function AdminQuestionManager() {
   useEffect(() => {
     loadQuestions();
   }, [loadQuestions]);
+
+  useLayoutEffect(() => {
+    const pageNode = pageRef.current;
+    if (!pageNode || typeof window === "undefined") return undefined;
+    const updateScaleOffset = () => {
+      if (!window.matchMedia("(min-width: 1024px)").matches) {
+        setDesktopScaleOffset(0);
+        return;
+      }
+      setDesktopScaleOffset(-(pageNode.offsetHeight * (1 - desktopScale)));
+    };
+    const frameId = window.requestAnimationFrame(updateScaleOffset);
+    const resizeObserver = new ResizeObserver(updateScaleOffset);
+    resizeObserver.observe(pageNode);
+    window.addEventListener("resize", updateScaleOffset);
+    return () => {
+      window.cancelAnimationFrame(frameId);
+      resizeObserver.disconnect();
+      window.removeEventListener("resize", updateScaleOffset);
+    };
+  }, [busy, desktopScale, expandedItems, hasCustomTolerance, hints.length, loading, questions.length, showAddForm, statusMessage]);
 
   const minimumChangePercentage = useMemo(() => {
     if (!questionText.trim() || !answerText.trim()) {
@@ -258,12 +283,18 @@ function AdminQuestionManager() {
 
   return (
     <div
+      ref={pageRef}
       style={{
-        minHeight: "100vh",
+        minHeight: isDesktopScale ? `${100 / desktopScale}vh` : "100vh",
+        width: isDesktopScale ? `${100 / desktopScale}%` : "100%",
+        transform: isDesktopScale ? `scale(${desktopScale})` : "none",
+        transformOrigin: "top left",
+        marginBottom: isDesktopScale ? `${desktopScaleOffset}px` : "0",
         background: "#0f172a",
         color: "#f1f5f9",
-        padding: "clamp(16px, 4vw, 32px)",
+        padding: "clamp(10px, 2.6vw, 20px)",
         fontFamily: "'Segoe UI', Tahoma, Geneva, Verdana, sans-serif",
+        fontSize: "0.84rem",
       }}
     >
       <div style={{ maxWidth: "1020px", margin: "0 auto" }}>

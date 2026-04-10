@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import axios from "axios";
 import { calculateChangePercentage, countChanges } from '../utils/countCodeChanges';
 import Editor from "@monaco-editor/react";
@@ -9,10 +9,20 @@ import { API_BASE_URL } from "../config/api";
 import { clearStoredSession, isAuthError, redirectToLogin, validateStoredSession } from "../utils/authSession";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import UserTopNav from "../components/UserTopNav";
-import { createDefaultPerformanceHistory, getUserProgressStorageKey, readUserProgress } from "../utils/performanceProgress";
+import {
+    applySubmissionProgress,
+    createDefaultPerformanceHistory,
+    deriveDifficultyRecommendation,
+    getUserProgressStorageKey,
+    readRecentSubmissions,
+    readUserProgress,
+} from "../utils/performanceProgress";
 import "./Challenges.css";
 
 function Challenges() {
+    const desktopScale = 0.85;
+    const isDesktopScale = typeof window !== "undefined" && window.innerWidth >= 1024;
+    const pageRef = useRef(null);
     const navigate = useNavigate();
     const [question, setQuestion] = useState(null);
     const loading = false;
@@ -31,7 +41,9 @@ function Challenges() {
     });
     const [solvedQuestions, setSolvedQuestions] = useState([]);
     const [accuracyStats, setAccuracyStats] = useState({ total: 0, correct: 0 });
+    const [recentSubmissions, setRecentSubmissions] = useState([]);
     const [currentRank, setCurrentRank] = useState("—");
+    const [desktopScaleOffset, setDesktopScaleOffset] = useState(0);
 
     useEffect(() => {
         if (!username) {
@@ -39,6 +51,7 @@ function Challenges() {
             setPerformanceHistory(createDefaultPerformanceHistory());
             setSolvedQuestions([]);
             setAccuracyStats({ total: 0, correct: 0 });
+            setRecentSubmissions([]);
             return;
         }
 
@@ -49,6 +62,7 @@ function Challenges() {
         setPerformanceHistory(readUserProgress(username, "performanceHistory", createDefaultPerformanceHistory()));
         setSolvedQuestions(readUserProgress(username, "solvedQuestions", []));
         setAccuracyStats(readUserProgress(username, "accuracyStats", { total: 0, correct: 0 }));
+        setRecentSubmissions(readRecentSubmissions(username));
     }, [username]);
 
     useEffect(() => {
@@ -66,6 +80,27 @@ function Challenges() {
         localStorage.setItem(getUserProgressStorageKey(username, "performanceScore"), performanceScore.toString());
         localStorage.setItem(getUserProgressStorageKey(username, "performanceHistory"), JSON.stringify(performanceHistory));
     }, [performanceScore, performanceHistory, username]);
+
+    useLayoutEffect(() => {
+        const pageNode = pageRef.current;
+        if (!pageNode || typeof window === "undefined") return undefined;
+        const updateScaleOffset = () => {
+            if (!window.matchMedia("(min-width: 1024px)").matches) {
+                setDesktopScaleOffset(0);
+                return;
+            }
+            setDesktopScaleOffset(-(pageNode.offsetHeight * (1 - desktopScale)));
+        };
+        const frameId = window.requestAnimationFrame(updateScaleOffset);
+        const resizeObserver = new ResizeObserver(updateScaleOffset);
+        resizeObserver.observe(pageNode);
+        window.addEventListener("resize", updateScaleOffset);
+        return () => {
+            window.cancelAnimationFrame(frameId);
+            resizeObserver.disconnect();
+            window.removeEventListener("resize", updateScaleOffset);
+        };
+    }, [desktopScale, leaderboardUsers.length, performanceHistory.length, question, questionSummaries, recentSubmissions.length, solvedQuestions.length, username]);
 
     useEffect(() => {
         let isMounted = true;
@@ -246,30 +281,37 @@ function Challenges() {
             });
             const isCorrect = res.data?.isCorrect === true;
             const pointsDelta = Number(res.data?.pointsDelta || 0);
+            const progressUpdate = applySubmissionProgress(username, {
+                pointsDelta,
+                isCorrect,
+                questionId: isCorrect ? question._id : "",
+                level: question.level,
+            });
 
             if (isCorrect) {
                 recordLocalLeaderboardActivity();
-                setAccuracyStats(prev => ({ total: prev.total + 1, correct: prev.correct + 1 }));
-                setSolvedQuestions(prev => prev.includes(question._id) ? prev : [...prev, question._id]);
-            } else {
-                setAccuracyStats(prev => ({ total: prev.total + 1, correct: prev.correct }));
             }
 
-            if (pointsDelta !== 0) {
-                setPerformanceScore(prev => Math.max(0, prev + pointsDelta));
-                setPerformanceHistory(hist => {
-                    const fallbackHistory = createDefaultPerformanceHistory(performanceScore);
-                    const nextHistory = Array.isArray(hist) && hist.length > 0 ? [...hist] : fallbackHistory;
-                    const currentScore = nextHistory.length > 0
-                        ? Number(nextHistory[nextHistory.length - 1]?.score || performanceScore)
-                        : performanceScore;
-                    const nextScore = Math.max(0, currentScore + pointsDelta);
-                    nextHistory.push({
-                        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: "2-digit", second: "2-digit" }),
-                        score: nextScore
+            if (progressUpdate) {
+                setPerformanceScore(progressUpdate.nextScore);
+                setAccuracyStats(progressUpdate.nextAccuracy);
+                setSolvedQuestions(progressUpdate.nextSolvedQuestions);
+                setRecentSubmissions(progressUpdate.nextRecentSubmissions);
+                if (pointsDelta !== 0) {
+                    setPerformanceHistory(hist => {
+                        const fallbackHistory = createDefaultPerformanceHistory(performanceScore);
+                        const nextHistory = Array.isArray(hist) && hist.length > 0 ? [...hist] : fallbackHistory;
+                        const currentScore = nextHistory.length > 0
+                            ? Number(nextHistory[nextHistory.length - 1]?.score || performanceScore)
+                            : performanceScore;
+                        const nextScore = Math.max(0, currentScore + pointsDelta);
+                        nextHistory.push({
+                            time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: "2-digit", second: "2-digit" }),
+                            score: nextScore
+                        });
+                        return nextHistory.slice(-9);
                     });
-                    return nextHistory.slice(-9);
-                });
+                }
             }
             alert(res.data.message);
         } catch (_err) {
@@ -285,7 +327,7 @@ function Challenges() {
         { name: "easy",   color: "#10b981", tasks: ["languages", "Basic Debugging"] },
         { name: "medium", color: "#f59e0b", tasks: ["languages", "Intermediate Debugging"] },
         { name: "hard",   color: "#ef4444", tasks: ["languages", "Advanced Debugging"] },
-        { name: "ai", route: "/buggy",      tasks: ["AI Questions", "Python/JS/C", "Dynamic Bug Fixing"] },
+        { name: "ai", label: "buggy", route: "/buggy", tasks: ["Buggy Questions", "Python/JS/C", "Dynamic Bug Fixing"] },
     ];
 
     const handleDeckPointerMove = (e) => {
@@ -463,6 +505,22 @@ function Challenges() {
     const activitySummary = summarizeLeaderboardActivity(readLocalLeaderboardActivity()).summary;
     const currentStreak = activitySummary.currentStreak;
     const accuracyRate = accuracyStats.total > 0 ? Math.round((accuracyStats.correct / accuracyStats.total) * 100) + "%" : "—";
+    const difficultyRecommendation = useMemo(
+        () =>
+            deriveDifficultyRecommendation({
+                recentSubmissions,
+                accuracyStats,
+                performanceScore,
+            }),
+        [recentSubmissions, accuracyStats, performanceScore]
+    );
+    const recommendedLevelName = difficultyRecommendation.level;
+    const recommendedConfidenceLabel =
+        difficultyRecommendation.confidence === "high"
+            ? "High confidence"
+            : difficultyRecommendation.confidence === "building"
+                ? "Building confidence"
+                : "Warming up";
     
     const statsLeft = [
         { label: "Questions Solved", value: solvedQuestions.length.toString(), icon: "✦", color: "#8b5cf6" },
@@ -498,18 +556,18 @@ function Challenges() {
 
     const card = {
         background: "linear-gradient(145deg, #1f1f2e, #11111e)",
-        borderRadius: "16px",
-        padding: "12px 16px",
+        borderRadius: "14px",
+        padding: "10px 14px",
         border: "1px solid rgba(139,92,246,0.18)",
     };
 
     const sectionLabel = {
-        fontSize: "0.68rem",
+        fontSize: "0.62rem",
         textTransform: "uppercase",
-        letterSpacing: "0.12em",
+        letterSpacing: "0.1em",
         color: "#8b5cf6",
         fontWeight: 700,
-        margin: "0 0 14px",
+        margin: "0 0 10px",
     };
 
     const liveThreshold =
@@ -517,36 +575,54 @@ function Challenges() {
     const isWithinThreshold = liveThreshold === null || changePercentage <= liveThreshold;
 
     return (
-        <div style={{ minHeight: "100vh", backgroundColor: "#1f2937", color: "white", padding: "clamp(16px, 4vw, 20px)", fontFamily: "'Segoe UI', Tahoma, Geneva, Verdana, sans-serif" }}>
+        <div ref={pageRef} style={{ minHeight: isDesktopScale ? `${100 / desktopScale}vh` : "100vh", width: isDesktopScale ? `${100 / desktopScale}%` : "100%", transform: isDesktopScale ? `scale(${desktopScale})` : "none", transformOrigin: "top left", marginBottom: isDesktopScale ? `${desktopScaleOffset}px` : "0", backgroundColor: "#1f2937", color: "white", padding: "clamp(8px, 2vw, 12px)", fontFamily: "'Segoe UI', Tahoma, Geneva, Verdana, sans-serif", fontSize: "0.84rem" }}>
             <UserTopNav />
 
             {/* Level Cards */}
-            <div style={{ display: "flex", gap: "20px", justifyContent: "center", flexWrap: "wrap", marginBottom: "40px" }}>
+            <div style={{ display: "flex", gap: "16px", justifyContent: "center", flexWrap: "wrap", marginBottom: "28px" }}>
                 {levels.map((lvl) => (
+                    (() => {
+                        const isRecommended = lvl.name === recommendedLevelName;
+                        const isAi = lvl.name === "ai";
+                        return (
                     <div
                         key={lvl.name}
                         onClick={() => navigate(lvl.route || `/${lvl.name}`)}
                         style={{
                             background: "linear-gradient(145deg, #1f1f2e, #11111e)",
-                            borderRadius: "20px", padding: "25px",
-                            width: "min(100%, 280px)", flex: "1 1 220px",
-                            boxShadow: "0 8px 20px rgba(0,0,0,0.5), 0 0 15px rgba(139,92,246,0.4)",
-                            display: "flex", flexDirection: "column", gap: "15px",
+                            borderRadius: "18px", padding: "18px",
+                            width: "min(100%, 248px)", flex: "1 1 210px",
+                            minHeight: "286px",
+                            boxShadow: isRecommended
+                                ? "0 12px 30px rgba(16,185,129,0.28), 0 0 24px rgba(52,211,153,0.35)"
+                                : "0 8px 20px rgba(0,0,0,0.5), 0 0 15px rgba(139,92,246,0.4)",
+                            display: "flex", flexDirection: "column", gap: "10px",
                             cursor: "pointer", transition: "transform 0.3s, box-shadow 0.3s",
+                            border: isRecommended ? "1px solid rgba(52,211,153,0.55)" : "1px solid rgba(139,92,246,0.12)",
                         }}
-                        onMouseOver={(e) => { e.currentTarget.style.transform = "translateY(-8px)"; e.currentTarget.style.boxShadow = "0 12px 25px rgba(0,0,0,0.6), 0 0 25px rgba(139,92,246,0.6)"; }}
-                        onMouseOut={(e) => { e.currentTarget.style.transform = "translateY(0)"; e.currentTarget.style.boxShadow = "0 8px 20px rgba(0,0,0,0.5), 0 0 15px rgba(139,92,246,0.4)"; }}
+                        onMouseOver={(e) => {
+                            e.currentTarget.style.transform = "translateY(-8px)";
+                            e.currentTarget.style.boxShadow = isRecommended
+                                ? "0 18px 34px rgba(16,185,129,0.34), 0 0 28px rgba(74,222,128,0.4)"
+                                : "0 12px 25px rgba(0,0,0,0.6), 0 0 25px rgba(139,92,246,0.6)";
+                        }}
+                        onMouseOut={(e) => {
+                            e.currentTarget.style.transform = "translateY(0)";
+                            e.currentTarget.style.boxShadow = isRecommended
+                                ? "0 12px 30px rgba(16,185,129,0.28), 0 0 24px rgba(52,211,153,0.35)"
+                                : "0 8px 20px rgba(0,0,0,0.5), 0 0 15px rgba(139,92,246,0.4)";
+                        }}
                     >
-                        <div style={{ color: "#fff", fontWeight: "bold", fontSize: "1.2rem" }}>{lvl.name.toUpperCase()}</div>
-                        <ul style={{ display: "flex", flexDirection: "column", gap: "8px", paddingLeft: "0", listStyle: "none" }}>
+                        <div style={{ color: "#fff", fontWeight: "bold", fontSize: "1.05rem" }}>{String(lvl.label || lvl.name).toUpperCase()}</div>
+                        <ul style={{ display: "flex", flexDirection: "column", gap: "6px", paddingLeft: "0", listStyle: "none", margin: 0 }}>
                             {[
                                 lvl.name === "ai"
-                                    ? "Generate dynamic AI questions"
+                                    ? "Generate dynamic buggy questions"
                                     : `${questionSummaries[lvl.name]?.count ?? 0} Questions`,
                                 ...lvl.tasks,
                             ].map((task, idx) => (
-                                <li key={idx} style={{ display: "flex", alignItems: "center", gap: "10px", color: "#fff", fontSize: "0.9rem" }}>
-                                    <span style={{ display: "flex", alignItems: "center", justifyContent: "center", width: "18px", height: "18px", borderRadius: "50%", background: "linear-gradient(45deg, #8b5cf6, #c084fc)", boxShadow: "0 0 5px rgba(139,92,246,0.7)", color: "#111" }}>✓</span>
+                                <li key={idx} style={{ display: "flex", alignItems: "center", gap: "8px", color: "#fff", fontSize: "0.8rem" }}>
+                                    <span style={{ display: "flex", alignItems: "center", justifyContent: "center", width: "16px", height: "16px", borderRadius: "50%", background: "linear-gradient(45deg, #8b5cf6, #c084fc)", boxShadow: "0 0 5px rgba(139,92,246,0.7)", color: "#111", fontSize: "0.72rem" }}>✓</span>
                                     {task === "languages" && lvl.name !== "ai"
                                         ? (questionSummaries[lvl.name]?.languages.length
                                             ? questionSummaries[lvl.name].languages.join(" / ")
@@ -555,14 +631,70 @@ function Challenges() {
                                 </li>
                             ))}
                         </ul>
+                        {isRecommended && !isAi ? (
+                            <div style={{
+                                display: "flex",
+                                flexDirection: "column",
+                                gap: "4px",
+                                alignItems: "flex-start",
+                            }}>
+                                <span style={{
+                                    padding: "3px 7px",
+                                    borderRadius: "999px",
+                                    background: "rgba(16,185,129,0.16)",
+                                    border: "1px solid rgba(52,211,153,0.34)",
+                                    color: "#a7f3d0",
+                                    fontSize: "0.62rem",
+                                    fontWeight: 700,
+                                    letterSpacing: "0.04em",
+                                    textTransform: "uppercase",
+                                }}>
+                                    Recommended
+                                </span>
+                                <div style={{
+                                    padding: "6px 8px",
+                                    borderRadius: "9px",
+                                    background: "rgba(15,23,42,0.58)",
+                                    border: "1px solid rgba(52,211,153,0.18)",
+                                }}>
+                                    <div style={{
+                                        color: "#a7f3d0",
+                                        fontSize: "0.58rem",
+                                        fontWeight: 700,
+                                        marginBottom: "1px",
+                                        textTransform: "uppercase",
+                                        letterSpacing: "0.04em",
+                                    }}>
+                                        {recommendedConfidenceLabel}
+                                    </div>
+                                    <p style={{
+                                        margin: 0,
+                                        color: "#d1fae5",
+                                        fontSize: "0.68rem",
+                                        lineHeight: 1.25,
+                                    }}>
+                                        {difficultyRecommendation.reason}
+                                    </p>
+                                    <p style={{
+                                        margin: "3px 0 0",
+                                        color: "#94a3b8",
+                                        fontSize: "0.6rem",
+                                    }}>
+                                        Based on your last {difficultyRecommendation.sampleSize} tracked submissions.
+                                    </p>
+                                </div>
+                            </div>
+                        ) : null}
                         <button
-                            style={{ marginTop: "15px", padding: "10px 0", width: "100%", background: "linear-gradient(90deg, #8b5cf6, #c084fc)", border: "none", borderRadius: "50px", color: "#fff", fontWeight: "bold", cursor: "pointer", boxShadow: "0 4px 15px rgba(139,92,246,0.5)", transition: "0.3s" }}
+                            style={{ marginTop: "auto", padding: "8px 0", width: "100%", background: "linear-gradient(90deg, #8b5cf6, #c084fc)", border: "none", borderRadius: "50px", color: "#fff", fontWeight: "bold", cursor: "pointer", boxShadow: "0 4px 15px rgba(139,92,246,0.5)", transition: "0.3s", fontSize: "0.88rem" }}
                             onMouseOver={(e) => e.currentTarget.style.boxShadow = "0 6px 20px rgba(139,92,246,0.7)"}
                             onMouseOut={(e) => e.currentTarget.style.boxShadow = "0 4px 15px rgba(139,92,246,0.5)"}
                         >
-                            {lvl.route ? "Open AI" : `Start ${lvl.name}`}
+                            {lvl.route ? "Open Buggy" : `Start ${String(lvl.label || lvl.name)}`}
                         </button>
                     </div>
+                        );
+                    })()
                 ))}
             </div>
 
@@ -626,7 +758,7 @@ function Challenges() {
                 The side panels are position:absolute, floating over the globe's blank edges.
                 The globe canvas fills the full width as before — nothing changes its sizing.
             */}
-            <div style={{ position: "relative", marginTop: "40px" }}>
+            <div style={{ position: "relative", marginTop: "24px" }}>
 
                 {/* Globe — unchanged, full width */}
                 <div
@@ -640,20 +772,20 @@ function Challenges() {
 
                 {/* LEFT PANEL — floats over globe left region */}
                 <div className="globe-side-panel globe-side-panel--left">
-                    <div style={{...card, display: "flex", flexDirection: "column", minHeight: "430px", justifyContent: "space-between"}}>
+                    <div style={{...card, display: "flex", flexDirection: "column", minHeight: "360px", justifyContent: "space-between"}}>
                         <p style={sectionLabel}>Performance Trend</p>
-                        <div style={{ width: "100%", height: "310px", marginTop: "10px", position: "relative", flex: 1 }}>
-                            <ResponsiveContainer width="100%" height={310}>
+                        <div style={{ width: "100%", height: "248px", marginTop: "6px", position: "relative", flex: 1 }}>
+                            <ResponsiveContainer width="100%" height={248}>
                                 <LineChart data={performanceHistory} margin={{ top: 5, right: 10, left: -20, bottom: 0 }}>
                                     <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" vertical={false} />
-                                    <XAxis dataKey="time" stroke="#6b7280" fontSize={11} tickMargin={8} />
+                                    <XAxis dataKey="time" stroke="#6b7280" fontSize={10} tickMargin={6} />
                                     <YAxis
                                         stroke="#6b7280"
-                                        fontSize={11}
+                                        fontSize={10}
                                         domain={[chartMin, safeChartMax]}
                                         ticks={performanceTicks}
                                         tickFormatter={(val) => `${Math.round(val)}`}
-                                        width={52}
+                                        width={44}
                                         allowDecimals={false}
                                     />
                                     <Tooltip 
@@ -665,9 +797,9 @@ function Challenges() {
                                 </LineChart>
                             </ResponsiveContainer>
                         </div>
-                        <div style={{ marginTop: "10px", textAlign: "center" }}>
-                            <div style={{ fontSize: "0.80rem", color: "#9ca3af" }}>Current Score</div>
-                            <div style={{ fontSize: "1.4rem", fontWeight: "bold", color: "#c084fc", textShadow: "0 0 10px rgba(192,132,252,0.4)" }}>{performanceScore}</div>
+                        <div style={{ marginTop: "6px", textAlign: "center" }}>
+                            <div style={{ fontSize: "0.74rem", color: "#9ca3af" }}>Current Score</div>
+                            <div style={{ fontSize: "1.2rem", fontWeight: "bold", color: "#c084fc", textShadow: "0 0 10px rgba(192,132,252,0.4)" }}>{performanceScore}</div>
                         </div>
                     </div>
                 </div>
@@ -677,19 +809,19 @@ function Challenges() {
                     
                     <div style={card}>
                         <p style={sectionLabel}>Your Stats</p>
-                        <div style={{ display: "flex", flexDirection: "column", gap: "13px" }}>
+                        <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
                             {statsLeft.map((s) => (
-                                <div key={s.label} style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                                <div key={s.label} style={{ display: "flex", alignItems: "center", gap: "10px" }}>
                                     <span style={{
-                                        width: "36px", height: "36px", borderRadius: "10px",
+                                        width: "32px", height: "32px", borderRadius: "9px",
                                         background: `${s.color}1a`,
                                         border: `1px solid ${s.color}40`,
                                         display: "flex", alignItems: "center", justifyContent: "center",
-                                        fontSize: "15px", color: s.color, flexShrink: 0,
+                                        fontSize: "13px", color: s.color, flexShrink: 0,
                                     }}>{s.icon}</span>
                                     <div>
-                                        <div style={{ fontSize: "0.72rem", color: "#6b7280", lineHeight: 1.3 }}>{s.label}</div>
-                                        <div style={{ fontSize: "1rem", fontWeight: "bold", color: "#f3f4f6" }}>{s.value}</div>
+                                        <div style={{ fontSize: "0.68rem", color: "#6b7280", lineHeight: 1.2 }}>{s.label}</div>
+                                        <div style={{ fontSize: "0.92rem", fontWeight: "bold", color: "#f3f4f6" }}>{s.value}</div>
                                     </div>
                                 </div>
                             ))}
@@ -698,31 +830,31 @@ function Challenges() {
 
                     <div style={card}>
                         <p style={sectionLabel}>Top Players</p>
-                        <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                        <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
                             {topPlayersDisplay.map((p, pIdx) => (
                                 <div key={pIdx} style={{ display: "flex", alignItems: "center", gap: "10px" }}>
                                     <span style={{
-                                        width: "24px", height: "24px", borderRadius: "50%",
+                                        width: "22px", height: "22px", borderRadius: "50%",
                                         background: p.rank <= 3 ? p.badge : "rgba(255,255,255,0.07)",
                                         border: p.rank <= 3 ? "none" : "1px solid rgba(255,255,255,0.12)",
                                         display: "flex", alignItems: "center", justifyContent: "center",
-                                        fontSize: "0.65rem", fontWeight: "bold",
+                                        fontSize: "0.6rem", fontWeight: "bold",
                                         color: p.rank <= 3 ? "#111" : "#6b7280",
                                         flexShrink: 0,
                                     }}>{p.rank}</span>
-                                    <span style={{ flex: 1, fontSize: "0.80rem", color: "#e5e7eb", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.name}</span>
-                                    <span style={{ fontSize: "0.80rem", color: "#a78bfa", fontWeight: 700 }}>{p.score}</span>
+                                    <span style={{ flex: 1, fontSize: "0.74rem", color: "#e5e7eb", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.name}</span>
+                                    <span style={{ fontSize: "0.74rem", color: "#a78bfa", fontWeight: 700 }}>{p.score}</span>
                                 </div>
                             ))}
                         </div>
                         <button
                             onClick={() => navigate("/leaderboard")}
                             style={{
-                                marginTop: "12px", width: "100%", padding: "6px 0",
+                                marginTop: "10px", width: "100%", padding: "5px 0",
                                 background: "rgba(139,92,246,0.1)",
                                 border: "1px solid rgba(139,92,246,0.3)",
                                 borderRadius: "8px", color: "#c084fc",
-                                fontSize: "0.75rem", cursor: "pointer", fontWeight: 600,
+                                fontSize: "0.7rem", cursor: "pointer", fontWeight: 600,
                                 transition: "background 0.2s",
                             }}
                             onMouseOver={(e) => e.currentTarget.style.background = "rgba(139,92,246,0.22)"}

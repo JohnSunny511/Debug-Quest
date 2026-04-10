@@ -2,7 +2,8 @@
 
 const express = require('express');
 const cors = require('cors');
-require('dotenv').config();
+const path = require("path");
+require('dotenv').config({ path: path.join(__dirname, ".env") });
 const session = require("cookie-session");
 const axios = require("axios");
 const { z } = require("zod");
@@ -173,7 +174,7 @@ app.post("/api/execute", authenticateUser, executeRateLimit, async (req, res) =>
             error?.response?.data?.detail ||
             "Invalid execution request."
           )
-        : "The code execution container is not reachable right now. See the README runtime note for setup details.";
+        : "The code execution container is not reachable yet. For local development, make sure Docker Compose is running and the Piston package installer has finished.";
 
     res.status(status).json({
       error: "Code execution failed",

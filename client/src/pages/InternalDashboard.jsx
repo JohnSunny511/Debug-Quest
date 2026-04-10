@@ -1,13 +1,38 @@
-import React, { useEffect } from "react";
+import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import AdminLogoutButton from "../components/AdminLogoutButton";
 
 function InternalDashboard() {
+  const desktopScale = 0.85;
+  const isDesktopScale = typeof window !== "undefined" && window.innerWidth >= 1024;
+  const pageRef = useRef(null);
+  const [desktopScaleOffset, setDesktopScaleOffset] = useState(0);
   const navigate = useNavigate();
 
   useEffect(() => {
     document.title = "Internal Dashboard";
   }, []);
+
+  useLayoutEffect(() => {
+    const pageNode = pageRef.current;
+    if (!pageNode || typeof window === "undefined") return undefined;
+    const updateScaleOffset = () => {
+      if (!window.matchMedia("(min-width: 1024px)").matches) {
+        setDesktopScaleOffset(0);
+        return;
+      }
+      setDesktopScaleOffset(-(pageNode.offsetHeight * (1 - desktopScale)));
+    };
+    const frameId = window.requestAnimationFrame(updateScaleOffset);
+    const resizeObserver = new ResizeObserver(updateScaleOffset);
+    resizeObserver.observe(pageNode);
+    window.addEventListener("resize", updateScaleOffset);
+    return () => {
+      window.cancelAnimationFrame(frameId);
+      resizeObserver.disconnect();
+      window.removeEventListener("resize", updateScaleOffset);
+    };
+  }, [desktopScale]);
 
   const cardStyle = {
     background: "#1e293b",
@@ -22,12 +47,18 @@ function InternalDashboard() {
 
   return (
     <div
+      ref={pageRef}
       style={{
-        minHeight: "100vh",
+        minHeight: isDesktopScale ? `${100 / desktopScale}vh` : "100vh",
+        width: isDesktopScale ? `${100 / desktopScale}%` : "100%",
+        transform: isDesktopScale ? `scale(${desktopScale})` : "none",
+        transformOrigin: "top left",
+        marginBottom: isDesktopScale ? `${desktopScaleOffset}px` : "0",
         background: "#020617",
         color: "#f8fafc",
-        padding: "clamp(16px, 4vw, 32px)",
+        padding: "clamp(10px, 2.6vw, 20px)",
         fontFamily: "'Segoe UI', Tahoma, Geneva, Verdana, sans-serif",
+        fontSize: "0.84rem",
       }}
     >
       <div style={{ maxWidth: "920px", margin: "0 auto" }}>

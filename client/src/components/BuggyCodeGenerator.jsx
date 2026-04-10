@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useLayoutEffect, useRef, useState } from "react";
 import Editor from "@monaco-editor/react";
 import { calculateChangePercentage, countChanges } from "../utils/countCodeChanges";
 import { executeCode } from "../utils/executeCode";
@@ -12,6 +12,9 @@ const AI_API_URL = `${API_BASE_URL}/api/ai/generate`;
 const AI_SUBMIT_URL = `${API_BASE_URL}/api/ai/submit`;
 
 export default function BuggyCodeGenerator() {
+  const desktopScale = 0.85;
+  const isDesktopScale = typeof window !== "undefined" && window.innerWidth >= 1024;
+  const pageRef = useRef(null);
   const [question, setQuestion] = useState(null);
   const [loading, setLoading] = useState(false);
   const [changeCount, setChangeCount] = useState(0);
@@ -21,9 +24,31 @@ export default function BuggyCodeGenerator() {
   const [submissionStatus, setSubmissionStatus] = useState("");
   const [revealedHints, setRevealedHints] = useState([]);
   const [areHintsVisible, setAreHintsVisible] = useState(false);
+  const [desktopScaleOffset, setDesktopScaleOffset] = useState(0);
 
   const [aiLanguage, setAiLanguage] = useState("python");
   const [aiTopic, setAiTopic] = useState("");
+
+  useLayoutEffect(() => {
+    const pageNode = pageRef.current;
+    if (!pageNode || typeof window === "undefined") return undefined;
+    const updateScaleOffset = () => {
+      if (!window.matchMedia("(min-width: 1024px)").matches) {
+        setDesktopScaleOffset(0);
+        return;
+      }
+      setDesktopScaleOffset(-(pageNode.offsetHeight * (1 - desktopScale)));
+    };
+    const frameId = window.requestAnimationFrame(updateScaleOffset);
+    const resizeObserver = new ResizeObserver(updateScaleOffset);
+    resizeObserver.observe(pageNode);
+    window.addEventListener("resize", updateScaleOffset);
+    return () => {
+      window.cancelAnimationFrame(frameId);
+      resizeObserver.disconnect();
+      window.removeEventListener("resize", updateScaleOffset);
+    };
+  }, [desktopScale, loading, question, revealedHints.length, submissionStatus]);
 
   async function generateAIQuestion() {
     setQuestion(null);
@@ -130,6 +155,7 @@ export default function BuggyCodeGenerator() {
       applySubmissionProgress(localStorage.getItem("username") || "", {
         pointsDelta: Number(data?.pointsDelta || 0),
         isCorrect: data?.isCorrect === true,
+        level: "ai",
       });
     } catch (error) {
       if (String(error?.message || "").includes("401") || String(error?.message || "").includes("403")) {
@@ -147,15 +173,20 @@ export default function BuggyCodeGenerator() {
 
 
   return (
-  <div style={{
-    minHeight: "100vh",
+  <div ref={pageRef} style={{
+    minHeight: isDesktopScale ? `${100 / desktopScale}vh` : "100vh",
+    width: isDesktopScale ? `${100 / desktopScale}%` : "100%",
+    transform: isDesktopScale ? `scale(${desktopScale})` : "none",
+    transformOrigin: "top left",
+    marginBottom: isDesktopScale ? `${desktopScaleOffset}px` : "0",
     background: "#0f172a",
     color: "#f1f5f9",
     display: "flex",
     flexDirection: "column",
     alignItems: "center",
-    padding: "2rem",
-    fontFamily: "'Segoe UI', Tahoma, Geneva, Verdana, sans-serif"
+    padding: "1.2rem",
+    fontFamily: "'Segoe UI', Tahoma, Geneva, Verdana, sans-serif",
+    fontSize: "0.84rem"
   }}>
     <UserTopNav
       breadcrumbItems={[

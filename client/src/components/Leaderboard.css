@@ -2,10 +2,21 @@
   position: relative;
   min-height: 100vh;
   overflow: hidden;
-  padding: 24px clamp(16px, 4vw, 56px) 40px;
+  padding: 16px clamp(10px, 2.4vw, 36px) 24px;
   background: linear-gradient(135deg, #061429 0%, #0a2d50 45%, #0c1f39 100%);
   color: #eaf5ff;
   font-family: "Avenir Next", "Montserrat", "Segoe UI", sans-serif;
+  font-size: 0.84rem;
+}
+
+@media (min-width: 1024px) {
+  .leaderboard-page {
+    width: 117.6470588235%;
+    min-height: 117.6470588235vh;
+    transform: scale(0.85);
+    transform-origin: top left;
+    margin-bottom: -17.6470588235vh;
+  }
 }
 
 .leaderboard-page::before {

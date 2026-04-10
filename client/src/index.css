@@ -5,16 +5,20 @@ body {
     'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
     sans-serif;
   width: 100%;
+  min-height: 100%;
   max-width: 100%;
   overflow-x: hidden;
+  background: #0f172a;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
 #root {
   width: 100%;
+  min-height: 100vh;
   max-width: 100%;
   overflow-x: hidden;
+  background: #0f172a;
 }
 
 *,

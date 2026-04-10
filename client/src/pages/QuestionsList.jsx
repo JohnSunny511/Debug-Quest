@@ -1,13 +1,17 @@
 // src/pages/QuestionsList.jsx
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
 import axios from "axios";
 import { API_BASE_URL } from "../config/api";
 import { redirectToLogin, validateStoredSession } from "../utils/authSession";
 import UserTopNav from "../components/UserTopNav";
 import PageLoader from "../components/PageLoader";
+import { getUserProgressStorageKey, readUserProgress } from "../utils/performanceProgress";
 
 function QuestionsList() {
+  const desktopScale = 0.85;
+  const isDesktopScale = typeof window !== "undefined" && window.innerWidth >= 1024;
+  const pageRef = useRef(null);
   const { level } = useParams(); // easy, medium, hard
   const navigate = useNavigate();
   const [questions, setQuestions] = useState([]);
@@ -15,14 +19,36 @@ function QuestionsList() {
   const [errorMessage, setErrorMessage] = useState("");
   const [selectedLanguage, setSelectedLanguage] = useState("all");
   const [selectedStatus, setSelectedStatus] = useState("all");
+  const [desktopScaleOffset, setDesktopScaleOffset] = useState(0);
   const [solvedQuestions, setSolvedQuestions] = useState(() => {
-    const stored = localStorage.getItem("debugQuestSolvedQuestions");
-    return stored ? JSON.parse(stored) : [];
+    const username = localStorage.getItem("username") || "";
+    return readUserProgress(username, "solvedQuestions", []);
   });
 
   useEffect(() => {
-    localStorage.setItem("debugQuestSolvedQuestions", JSON.stringify(solvedQuestions));
+    const username = localStorage.getItem("username") || "";
+    if (!username) return;
+    localStorage.setItem(
+      getUserProgressStorageKey(username, "solvedQuestions"),
+      JSON.stringify(solvedQuestions)
+    );
   }, [solvedQuestions]);
+
+  useEffect(() => {
+    const syncSolvedQuestions = () => {
+      const username = localStorage.getItem("username") || "";
+      setSolvedQuestions(readUserProgress(username, "solvedQuestions", []));
+    };
+
+    syncSolvedQuestions();
+    window.addEventListener("focus", syncSolvedQuestions);
+    window.addEventListener("storage", syncSolvedQuestions);
+
+    return () => {
+      window.removeEventListener("focus", syncSolvedQuestions);
+      window.removeEventListener("storage", syncSolvedQuestions);
+    };
+  }, []);
 
   useEffect(() => {
     let isMounted = true;
@@ -60,6 +86,32 @@ function QuestionsList() {
     };
   }, [level, navigate]);
 
+  useLayoutEffect(() => {
+    const pageNode = pageRef.current;
+    if (!pageNode || typeof window === "undefined") return undefined;
+
+    const updateScaleOffset = () => {
+      if (!window.matchMedia("(min-width: 1024px)").matches) {
+        setDesktopScaleOffset(0);
+        return;
+      }
+
+      setDesktopScaleOffset(-(pageNode.offsetHeight * (1 - desktopScale)));
+    };
+
+    const frameId = window.requestAnimationFrame(updateScaleOffset);
+    const resizeObserver = new ResizeObserver(updateScaleOffset);
+
+    resizeObserver.observe(pageNode);
+    window.addEventListener("resize", updateScaleOffset);
+
+    return () => {
+      window.cancelAnimationFrame(frameId);
+      resizeObserver.disconnect();
+      window.removeEventListener("resize", updateScaleOffset);
+    };
+  }, [desktopScale, questions.length, selectedLanguage, selectedStatus, solvedQuestions.length]);
+
   const availableLanguages = Array.from(
     new Set(
       questions
@@ -95,15 +147,20 @@ function QuestionsList() {
   }
 
   return (
-    <div style={{
-      minHeight: "100vh",
+    <div ref={pageRef} style={{
+      minHeight: isDesktopScale ? `${100 / desktopScale}vh` : "100vh",
+      width: isDesktopScale ? `${100 / desktopScale}%` : "100%",
+      transform: isDesktopScale ? `scale(${desktopScale})` : "none",
+      transformOrigin: "top left",
+      marginBottom: isDesktopScale ? `${desktopScaleOffset}px` : "0",
       background: "#0f172a",
       color: "#f1f5f9",
       display: "flex",
       flexDirection: "column",
       alignItems: "center",
-      padding: "clamp(16px, 4vw, 32px)",
-      fontFamily: "'Segoe UI', Tahoma, Geneva, Verdana, sans-serif"
+      padding: "clamp(10px, 2.6vw, 20px)",
+      fontFamily: "'Segoe UI', Tahoma, Geneva, Verdana, sans-serif",
+      fontSize: "0.84rem"
     }}>
       <UserTopNav
         breadcrumbItems={[

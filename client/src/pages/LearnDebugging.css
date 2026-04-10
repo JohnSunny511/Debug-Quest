@@ -2,10 +2,21 @@
   position: relative;
   min-height: 100vh;
   overflow-x: hidden;
-  padding: 26px clamp(16px, 4vw, 56px) 40px;
+  padding: 16px clamp(10px, 2.4vw, 36px) 24px;
   color: #edf9ff;
   background: linear-gradient(145deg, #061224 0%, #0b2843 52%, #0a1c33 100%);
   font-family: "Avenir Next", "Nunito Sans", "Segoe UI", sans-serif;
+  font-size: 0.84rem;
+}
+
+@media (min-width: 1024px) {
+  .learn-roadmap-page {
+    width: 117.6470588235%;
+    min-height: 117.6470588235vh;
+    transform: scale(0.85);
+    transform-origin: top left;
+    margin-bottom: -17.6470588235vh;
+  }
 }
 
 .learn-roadmap-bg {

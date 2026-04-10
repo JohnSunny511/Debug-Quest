@@ -1,10 +1,21 @@
 .lesson-page {
   min-height: 100vh;
   overflow-x: hidden;
-  padding: 24px clamp(16px, 4vw, 56px) 42px;
+  padding: 16px clamp(10px, 2.4vw, 36px) 24px;
   color: #eaf6ff;
   background: linear-gradient(145deg, #071425 0%, #0c2844 55%, #0b1c33 100%);
   font-family: "Avenir Next", "Nunito Sans", "Segoe UI", sans-serif;
+  font-size: 0.84rem;
+}
+
+@media (min-width: 1024px) {
+  .lesson-page {
+    width: 117.6470588235%;
+    min-height: 117.6470588235vh;
+    transform: scale(0.85);
+    transform-origin: top left;
+    margin-bottom: -17.6470588235vh;
+  }
 }
 
 .lesson-header {

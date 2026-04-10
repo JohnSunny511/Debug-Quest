@@ -1,5 +1,5 @@
 // src/pages/QuestionDetail.jsx
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import axios from "axios";
 import Editor from "@monaco-editor/react";
@@ -19,6 +19,9 @@ import UserTopNav from "../components/UserTopNav";
 import PageLoader from "../components/PageLoader";
 
 function QuestionDetail() {
+  const desktopScale = 0.85;
+  const isDesktopScale = typeof window !== "undefined" && window.innerWidth >= 1024;
+  const pageRef = useRef(null);
   const { level, id } = useParams();
   const navigate = useNavigate();
   const location = useLocation();
@@ -37,6 +40,7 @@ function QuestionDetail() {
   const [showRuntimeNote, setShowRuntimeNote] = useState(false);
   const [currentUserRole, setCurrentUserRole] = useState(() => localStorage.getItem("role") || "user");
   const [pageError, setPageError] = useState("");
+  const [desktopScaleOffset, setDesktopScaleOffset] = useState(0);
   const [revealedHints, setRevealedHints] = useState([]);
   const [areHintsVisible, setAreHintsVisible] = useState(false);
   const [isCorrectAnswerVisible, setIsCorrectAnswerVisible] = useState(false);
@@ -125,7 +129,7 @@ function QuestionDetail() {
         setChangePercentage(0);
         setRevealedHints([]);
         setAreHintsVisible(false);
-        setIsCorrectAnswerVisible(res.data?.answerUnlocked === true);
+        setIsCorrectAnswerVisible(false);
         setIsRevealAnswerLoading(false);
         setCurrentUserRole(localStorage.getItem("role") || "user");
       } catch (error) {
@@ -186,6 +190,32 @@ function QuestionDetail() {
       isMounted = false;
     };
   }, [question?._id, navigate]);
+
+  useLayoutEffect(() => {
+    const pageNode = pageRef.current;
+    if (!pageNode || typeof window === "undefined") return undefined;
+
+    const updateScaleOffset = () => {
+      if (!window.matchMedia("(min-width: 1024px)").matches) {
+        setDesktopScaleOffset(0);
+        return;
+      }
+
+      setDesktopScaleOffset(-(pageNode.offsetHeight * (1 - desktopScale)));
+    };
+
+    const frameId = window.requestAnimationFrame(updateScaleOffset);
+    const resizeObserver = new ResizeObserver(updateScaleOffset);
+
+    resizeObserver.observe(pageNode);
+    window.addEventListener("resize", updateScaleOffset);
+
+    return () => {
+      window.cancelAnimationFrame(frameId);
+      resizeObserver.disconnect();
+      window.removeEventListener("resize", updateScaleOffset);
+    };
+  }, [desktopScale, discussionMessages.length, pageError, question, revealedHints.length, output, showRuntimeNote]);
 
   useEffect(() => {
     if (!highlightedMessageId || discussionMessages.length === 0) return;
@@ -268,6 +298,7 @@ function QuestionDetail() {
         pointsDelta,
         isCorrect,
         questionId: isCorrect ? question._id : "",
+        level,
       });
       alert(res.data.message);
     } catch (_err) {
@@ -604,12 +635,18 @@ function QuestionDetail() {
 
   return (
     <div
+      ref={pageRef}
       style={{
-        minHeight: "100vh",
+        minHeight: isDesktopScale ? `${100 / desktopScale}vh` : "100vh",
+        width: isDesktopScale ? `${100 / desktopScale}%` : "100%",
+        transform: isDesktopScale ? `scale(${desktopScale})` : "none",
+        transformOrigin: "top left",
+        marginBottom: isDesktopScale ? `${desktopScaleOffset}px` : "0",
         background: "#0f172a",
         color: "#f1f5f9",
-        padding: "clamp(16px, 4vw, 32px)",
+        padding: "clamp(10px, 2.6vw, 20px)",
         fontFamily: "'Segoe UI', Tahoma, Geneva, Verdana, sans-serif",
+        fontSize: "0.84rem",
       }}
     >
       <UserTopNav
@@ -851,7 +888,23 @@ function QuestionDetail() {
                 type="button"
                 onClick={() => {
                   if (question.answerUnlocked) {
-                    setIsCorrectAnswerVisible((prev) => !prev);
+                    if (isCorrectAnswerVisible) {
+                      setIsCorrectAnswerVisible(false);
+                      return;
+                    }
+                    const shouldReveal = window.confirm(
+                      `Viewing the answer will reduce this question's reward by ${answerPenaltyPoints} point(s). Continue?`
+                    );
+                    if (!shouldReveal) {
+                      return;
+                    }
+                    setIsCorrectAnswerVisible(true);
+                    return;
+                  }
+                  const shouldReveal = window.confirm(
+                    `Viewing the answer will reduce this question's reward by ${answerPenaltyPoints} point(s). Continue?`
+                  );
+                  if (!shouldReveal) {
                     return;
                   }
                   revealAnswer();

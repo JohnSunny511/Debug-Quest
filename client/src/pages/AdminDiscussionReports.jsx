@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { API_BASE_URL } from "../config/api";
 import AdminLogoutButton from "../components/AdminLogoutButton";
@@ -6,10 +6,14 @@ import AdminLogoutButton from "../components/AdminLogoutButton";
 const API_BASE = `${API_BASE_URL}/api/dashboard/internal/discussions`;
 
 function AdminDiscussionReports() {
+  const desktopScale = 0.85;
+  const isDesktopScale = typeof window !== "undefined" && window.innerWidth >= 1024;
+  const pageRef = useRef(null);
   const navigate = useNavigate();
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(false);
   const [statusMessage, setStatusMessage] = useState("");
+  const [desktopScaleOffset, setDesktopScaleOffset] = useState(0);
 
   const readResponseData = async (response) => {
     const contentType = response.headers.get("content-type") || "";
@@ -44,14 +48,41 @@ function AdminDiscussionReports() {
     loadReportedMessages();
   }, [loadReportedMessages]);
 
+  useLayoutEffect(() => {
+    const pageNode = pageRef.current;
+    if (!pageNode || typeof window === "undefined") return undefined;
+    const updateScaleOffset = () => {
+      if (!window.matchMedia("(min-width: 1024px)").matches) {
+        setDesktopScaleOffset(0);
+        return;
+      }
+      setDesktopScaleOffset(-(pageNode.offsetHeight * (1 - desktopScale)));
+    };
+    const frameId = window.requestAnimationFrame(updateScaleOffset);
+    const resizeObserver = new ResizeObserver(updateScaleOffset);
+    resizeObserver.observe(pageNode);
+    window.addEventListener("resize", updateScaleOffset);
+    return () => {
+      window.cancelAnimationFrame(frameId);
+      resizeObserver.disconnect();
+      window.removeEventListener("resize", updateScaleOffset);
+    };
+  }, [desktopScale, items.length, loading, statusMessage]);
+
   return (
     <div
+      ref={pageRef}
       style={{
-        minHeight: "100vh",
+        minHeight: isDesktopScale ? `${100 / desktopScale}vh` : "100vh",
+        width: isDesktopScale ? `${100 / desktopScale}%` : "100%",
+        transform: isDesktopScale ? `scale(${desktopScale})` : "none",
+        transformOrigin: "top left",
+        marginBottom: isDesktopScale ? `${desktopScaleOffset}px` : "0",
         background: "#020617",
         color: "#f8fafc",
-        padding: "clamp(16px, 4vw, 32px)",
+        padding: "clamp(10px, 2.6vw, 20px)",
         fontFamily: "'Segoe UI', Tahoma, Geneva, Verdana, sans-serif",
+        fontSize: "0.84rem",
       }}
     >
       <div style={{ maxWidth: "980px", margin: "0 auto" }}>

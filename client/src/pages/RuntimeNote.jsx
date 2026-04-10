@@ -1,15 +1,52 @@
-import React from "react";
+import React, { useLayoutEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 
 function RuntimeNote() {
+  const desktopScale = 0.85;
+  const isDesktopScale = typeof window !== "undefined" && window.innerWidth >= 1024;
+  const pageRef = useRef(null);
+  const [desktopScaleOffset, setDesktopScaleOffset] = useState(0);
+
+  useLayoutEffect(() => {
+    const pageNode = pageRef.current;
+    if (!pageNode || typeof window === "undefined") return undefined;
+
+    const updateScaleOffset = () => {
+      if (!window.matchMedia("(min-width: 1024px)").matches) {
+        setDesktopScaleOffset(0);
+        return;
+      }
+
+      setDesktopScaleOffset(-(pageNode.offsetHeight * (1 - desktopScale)));
+    };
+
+    const frameId = window.requestAnimationFrame(updateScaleOffset);
+    const resizeObserver = new ResizeObserver(updateScaleOffset);
+
+    resizeObserver.observe(pageNode);
+    window.addEventListener("resize", updateScaleOffset);
+
+    return () => {
+      window.cancelAnimationFrame(frameId);
+      resizeObserver.disconnect();
+      window.removeEventListener("resize", updateScaleOffset);
+    };
+  }, [desktopScale]);
+
   return (
     <main
+      ref={pageRef}
       style={{
-        minHeight: "100vh",
+        minHeight: isDesktopScale ? `${100 / desktopScale}vh` : "100vh",
+        width: isDesktopScale ? `${100 / desktopScale}%` : "100%",
+        transform: isDesktopScale ? `scale(${desktopScale})` : "none",
+        transformOrigin: "top left",
+        marginBottom: isDesktopScale ? `${desktopScaleOffset}px` : "0",
         background: "#0f172a",
         color: "#e2e8f0",
-        padding: "clamp(20px, 4vw, 40px)",
+        padding: "clamp(12px, 2.8vw, 24px)",
         fontFamily: "'Segoe UI', Tahoma, Geneva, Verdana, sans-serif",
+        fontSize: "0.84rem",
       }}
     >
       <div style={{ maxWidth: "860px", margin: "0 auto" }}>
